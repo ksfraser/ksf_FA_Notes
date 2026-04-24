@@ -1,0 +1,145 @@
+<?php
+/**
+ * Notes Database Functions
+ */
+
+// Try to load event manager
+@include_once __DIR__ . '/../../vendor/ksfraser/event/src/Ksfraser/Event/EventManager.php';
+$use_events = class_exists('Ksfraser\Event\EventManager');
+
+function notes_dispatch_event(string $eventName, $eventData = null): void
+{
+    if ($use_events && class_exists('Ksfraser\Event\EventManager')) {
+        try {
+            \Ksfraser\Event\EventManager::dispatchEvent($eventName, $eventData);
+        } catch (Exception $e) {
+            error_log('Notes Event Error: ' . $e->getMessage());
+        }
+    }
+    if (function_exists('add_hook')) {
+        add_hook($eventName, function($data) use ($eventData) { return $eventData; });
+    }
+}
+
+function add_note($entity_id, $entity_type, $note, $note_type = 'Comment', $created_by = null)
+{
+    $created_by = $created_by ?? $_SESSION['wa_current_user']->name ?? 'system';
+    
+    $sql = "INSERT INTO " . TB_PREF . "fa_crm_notes
+        (entity_id, entity_type, note_type, note, created_by)
+    VALUES (" . db_escape($entity_id) . ",
+            " . db_escape($entity_type) . ",
+            " . db_escape($note_type) . ",
+            " . db_escape($note) . ",
+            " . db_escape($created_by) . ")";
+
+    db_query($sql, "Could not add note");
+    $note_id = db_insert_id();
+    
+    notes_dispatch_event('note_added', ['note_id' => $note_id, 'entity_id' => $entity_id, 'entity_type' => $entity_type]);
+    
+    return $note_id;
+}
+
+function get_note($note_id)
+{
+    $sql = "SELECT * FROM " . TB_PREF . "fa_crm_notes WHERE id = " . db_escape($note_id);
+    $result = db_query($sql, "Could not get note");
+    return db_fetch_assoc($result);
+}
+
+function get_notes($entity_id, $entity_type)
+{
+    $sql = "SELECT * FROM " . TB_PREF . "fa_crm_notes
+        WHERE entity_id = " . db_escape($entity_id) . "
+        AND entity_type = " . db_escape($entity_type) . "
+        ORDER BY created_at DESC";
+
+    $result = db_query($sql, "Could not get notes");
+    $notes = [];
+    while ($row = db_fetch_assoc($result)) {
+        $notes[] = $row;
+    }
+    return $notes;
+}
+
+function update_note($note_id, $note, $note_type = null)
+{
+    $sets = ["note = " . db_escape($note)];
+    if ($note_type !== null) {
+        $sets[] = "note_type = " . db_escape($note_type);
+    }
+    
+    $sql = "UPDATE " . TB_PREF . "fa_crm_notes SET
+        " . implode(', ', $sets) . "
+        WHERE id = " . db_escape($note_id);
+
+    db_query($sql, "Could not update note");
+    
+    notes_dispatch_event('note_updated', ['note_id' => $note_id]);
+}
+
+function delete_note($note_id)
+{
+    $old = get_note($note_id);
+    $sql = "DELETE FROM " . TB_PREF . "fa_crm_notes WHERE id = " . db_escape($note_id);
+    db_query($sql, "Could not delete note");
+    
+    if ($old) {
+        notes_dispatch_event('note_deleted', [
+            'note_id' => $note_id,
+            'entity_id' => $old['entity_id'],
+            'entity_type' => $old['entity_type'],
+        ]);
+    }
+}
+
+function search_notes($keyword, $entity_type = null, $limit = 50)
+{
+    $sql = "SELECT * FROM " . TB_PREF . "fa_crm_notes
+        WHERE note LIKE " . db_escape('%' . $keyword . '%');
+
+    if ($entity_type !== null) {
+        $sql .= " AND entity_type = " . db_escape($entity_type);
+    }
+
+    $sql .= " ORDER BY created_at DESC LIMIT " . db_escape($limit);
+
+    $result = db_query($sql, "Could not search notes");
+    $notes = [];
+    while ($row = db_fetch_assoc($result)) {
+        $notes[] = $row;
+    }
+    return $notes;
+}
+
+function get_note_count($entity_id, $entity_type)
+{
+    $sql = "SELECT COUNT(*) as cnt FROM " . TB_PREF . "fa_crm_notes
+        WHERE entity_id = " . db_escape($entity_id) . "
+        AND entity_type = " . db_escape($entity_type);
+
+    $result = db_query($sql, "Could not get note count");
+    $row = db_fetch_assoc($result);
+    return $row ? (int) $row['cnt'] : 0;
+}
+
+function get_entity_notes_summary($entity_type = null)
+{
+    $sql = "SELECT entity_type, entity_id, COUNT(*) as note_count,
+            MAX(created_at) as last_note_date
+        FROM " . TB_PREF . "fa_crm_notes";
+
+    if ($entity_type !== null) {
+        $sql .= " WHERE entity_type = " . db_escape($entity_type);
+    }
+
+    $sql .= " GROUP BY entity_type, entity_id ORDER BY last_note_date DESC";
+
+    $result = db_query($sql, "Could not get notes summary");
+    $summary = [];
+    while ($row = db_fetch_assoc($result)) {
+        $summary[] = $row;
+    }
+    return $summary;
+}
