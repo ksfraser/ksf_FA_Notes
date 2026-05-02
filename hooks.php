@@ -3,67 +3,71 @@
  * FA_Notes Module Hooks for FrontAccounting
  */
 
-$module_name = 'FA_Notes';
-$module_version = '1.0.0';
-$module_description = 'Reusable Notes System - polymorphic notes for CRM entities';
-$module_author = 'KSFII Development Team';
-$module_category = 'CRM';
+define('SS_NOTES', 128 << 8);
 
-function fa_notes_install(): bool
-{
-    global $db;
+class hooks_fa_notes extends hooks {
+    var $module_name = 'fa_notes';
 
-    @include_once __DIR__ . '/vendor-src/Ksfraser/Common/ComposerDependencyManager.php';
-    if (class_exists('Ksfraser\Common\ComposerDependencyManager')) {
-        $composerMgr = new \Ksfraser\Common\ComposerDependencyManager(__DIR__);
-        $composerMgr->ensureDependencies();
-        @include_once $composerMgr->getAutoloadPath();
+    function install_options($app) {
+        global $path_to_root;
+
+        switch($app->id) {
+            case 'CRM':
+                $app->add_lapp_function(0, _("Notes"),
+                    $path_to_root."/modules/".$this->module_name."/notes.php", 'SA_NOTESVIEW', MENU_ENTRY);
+                break;
+        }
     }
 
-    if (!fa_notes_create_tables()) return false;
-    return true;
-}
-
-function fa_notes_activate(): bool
-{
-    @include_once __DIR__ . '/vendor-src/Ksfraser/Common/ComposerDependencyManager.php';
-    if (class_exists('Ksfraser\Common\ComposerDependencyManager')) {
-        $composerMgr = new \Ksfraser\Common\ComposerDependencyManager(__DIR__);
-        $composerMgr->ensureDependencies();
-        @include_once $composerMgr->getAutoloadPath();
+    function install_access() {
+        $security_sections[SS_NOTES] = _("Notes Management");
+        $security_areas['SA_NOTESVIEW'] = array(SS_NOTES | 1, _("View Notes"));
+        $security_areas['SA_NOTESMANAGE'] = array(SS_NOTES | 2, _("Manage Notes"));
+        return array($security_areas, $security_sections);
     }
 
-    add_hook('note_added', 'fa_notes_on_note_added');
-    add_hook('note_updated', 'fa_notes_on_note_updated');
-    add_hook('note_deleted', 'fa_notes_on_note_deleted');
-    return true;
+    function activate_extension($company, $check_only=true) {
+        $updates = array('sql/update.sql' => array($this->module_name));
+        $ok = $this->update_databases($company, $updates, $check_only);
+        if ($check_only || !$ok) {
+            return $ok;
+        }
+        $this->ensure_notes_schema();
+        return $ok;
+    }
+
+    private function table_exists($table) {
+        $sql = "SHOW TABLES LIKE " . db_escape($table);
+        $res = db_query($sql, 'Failed checking table existence');
+        return db_num_rows($res) > 0;
+    }
+
+    private function ensure_notes_schema() {
+        $tables = array(
+            TB_PREF . "fa_crm_notes" => "
+                CREATE TABLE IF NOT EXISTS `" . TB_PREF . "fa_crm_notes` (
+                    `id` INT(11) NOT NULL AUTO_INCREMENT,
+                    `entity_id` INT(11) NOT NULL,
+                    `entity_type` VARCHAR(20) NOT NULL,
+                    `note_type` VARCHAR(20) DEFAULT 'Comment',
+                    `note` TEXT NOT NULL,
+                    `created_by` VARCHAR(100) DEFAULT NULL,
+                    `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    PRIMARY KEY (`id`),
+                    KEY `idx_entity` (`entity_id`, `entity_type`),
+                    KEY `idx_note_type` (`note_type`),
+                    KEY `idx_created_by` (`created_by`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+        );
+
+        foreach ($tables as $table_name => $sql) {
+            db_query($sql, "Could not create Notes table: $table_name");
+        }
+    }
+
+    function db_prevoid($trans_type, $trans_no) {
+        // Handle voiding if needed
+    }
 }
-
-function fa_notes_deactivate(): bool { return true; }
-function fa_notes_uninstall(): bool { return true; }
-
-function fa_notes_create_tables(): bool
-{
-    global $db;
-
-    $sql = "CREATE TABLE IF NOT EXISTS `" . TB_PREF . "fa_crm_notes` (
-        `id` INT(11) NOT NULL AUTO_INCREMENT,
-        `entity_id` INT(11) NOT NULL,
-        `entity_type` VARCHAR(20) NOT NULL,
-        `note_type` VARCHAR(20) DEFAULT 'Comment',
-        `note` TEXT NOT NULL,
-        `created_by` VARCHAR(100) DEFAULT NULL,
-        `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        PRIMARY KEY (`id`),
-        KEY `idx_entity` (`entity_id`, `entity_type`),
-        KEY `idx_note_type` (`note_type`),
-        KEY `idx_created_by` (`created_by`)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
-
-    return db_query($sql, "Could not create fa_crm_notes table");
-}
-
-function fa_notes_on_note_added($noteId) { error_log("Note added: $noteId"); }
-function fa_notes_on_note_updated($noteId) { error_log("Note updated: $noteId"); }
-function fa_notes_on_note_deleted($noteId) { error_log("Note deleted: $noteId"); }
+?>
