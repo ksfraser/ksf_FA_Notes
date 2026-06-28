@@ -21,17 +21,29 @@ function notes_dispatch_event(string $eventName, $eventData = null): void
     }
 }
 
-function add_note($entity_id, $entity_type, $note, $note_type = 'Comment', $created_by = null)
+function add_note($entity_id, $entity_type, $note, $note_type = 'Comment', $created_by = null, $owner = null, $group_id = null)
 {
     $created_by = $created_by ?? $_SESSION['wa_current_user']->name ?? 'system';
     
-    $sql = "INSERT INTO " . TB_PREF . "fa_crm_notes
-        (entity_id, entity_type, note_type, note, created_by)
-    VALUES (" . db_escape($entity_id) . ",
+    $columns = "entity_id, entity_type, note_type, note, created_by";
+    $values = db_escape($entity_id) . ",
             " . db_escape($entity_type) . ",
             " . db_escape($note_type) . ",
             " . db_escape($note) . ",
-            " . db_escape($created_by) . ")";
+            " . db_escape($created_by);
+
+    if ($owner !== null) {
+        $columns .= ", owner";
+        $values .= ",\n            " . db_escape($owner);
+    }
+    if ($group_id !== null) {
+        $columns .= ", group_id";
+        $values .= ",\n            " . db_escape($group_id);
+    }
+
+    $sql = "INSERT INTO " . TB_PREF . "fa_crm_notes
+        ($columns)
+    VALUES ($values)";
 
     db_query($sql, "Could not add note");
     $note_id = db_insert_id();
@@ -142,4 +154,147 @@ function get_entity_notes_summary($entity_type = null)
         $summary[] = $row;
     }
     return $summary;
+}
+
+/**
+ * Link a note to an additional entity (multi-link support)
+ *
+ * @param int    $note_id
+ * @param string $entity_type
+ * @param int    $entity_id
+ * @return int   The link ID
+ * @throws RuntimeException If note not found
+ */
+function link_note(int $note_id, string $entity_type, int $entity_id): int
+{
+    $note = get_note($note_id);
+    if (!$note) {
+        throw new \RuntimeException("Note {$note_id} not found");
+    }
+
+    $sql = "INSERT IGNORE INTO " . TB_PREF . "fa_note_links
+        (note_id, entity_type, entity_id)
+        VALUES (" . db_escape($note_id) . ",
+                " . db_escape($entity_type) . ",
+                " . db_escape($entity_id) . ")";
+
+    db_query($sql, "Could not link note to entity");
+    $link_id = db_insert_id();
+
+    notes_dispatch_event('note_linked', [
+        'note_id' => $note_id,
+        'entity_type' => $entity_type,
+        'entity_id' => $entity_id,
+        'link_id' => $link_id,
+    ]);
+
+    return $link_id;
+}
+
+/**
+ * Unlink a note from an entity
+ *
+ * @param int    $note_id
+ * @param string $entity_type
+ * @param int    $entity_id
+ */
+function unlink_note(int $note_id, string $entity_type, int $entity_id): void
+{
+    $sql = "DELETE FROM " . TB_PREF . "fa_note_links
+        WHERE note_id = " . db_escape($note_id) . "
+        AND entity_type = " . db_escape($entity_type) . "
+        AND entity_id = " . db_escape($entity_id);
+
+    db_query($sql, "Could not unlink note from entity");
+}
+
+/**
+ * Get all entities linked to a note (including primary entity_id/entity_type)
+ *
+ * @param int $note_id
+ * @return array  Array of ['entity_type', 'entity_id', ...]
+ */
+function get_linked_entities(int $note_id): array
+{
+    $note = get_note($note_id);
+    if (!$note) {
+        return [];
+    }
+
+    $entities = [];
+    if (!empty($note['entity_type']) && !empty($note['entity_id'])) {
+        $entities[] = [
+            'entity_type' => $note['entity_type'],
+            'entity_id'   => (int) $note['entity_id'],
+            'is_primary'  => true,
+        ];
+    }
+
+    $sql = "SELECT entity_type, entity_id FROM " . TB_PREF . "fa_note_links
+        WHERE note_id = " . db_escape($note_id);
+
+    $result = db_query($sql, "Could not get linked entities");
+    while ($row = db_fetch_assoc($result)) {
+        $entities[] = [
+            'entity_type' => $row['entity_type'],
+            'entity_id'   => (int) $row['entity_id'],
+            'is_primary'  => false,
+        ];
+    }
+
+    return $entities;
+}
+
+/**
+ * ACL: Check if a user can view a note (owner or group access)
+ *
+ * @param int      $note_id
+ * @param int|null $user_id  Defaults to current user
+ * @return bool
+ */
+function can_view_note(int $note_id, ?int $user_id = null): bool
+{
+    if ($user_id === null) {
+        $user_id = (int) ($_SESSION['wa_current_user']->user ?? 0);
+    }
+
+    $note = get_note($note_id);
+    if (!$note) {
+        return false;
+    }
+
+    if (!empty($note['owner']) && (int) $note['owner'] === $user_id) {
+        return true;
+    }
+
+    if (empty($note['owner'])) {
+        return true;
+    }
+
+    return false;
+}
+
+/**
+ * ACL: Check if a user can edit a note
+ *
+ * @param int      $note_id
+ * @param int|null $user_id  Defaults to current user
+ * @return bool
+ */
+function can_edit_note(int $note_id, ?int $user_id = null): bool
+{
+    if ($user_id === null) {
+        $user_id = (int) ($_SESSION['wa_current_user']->user ?? 0);
+    }
+
+    $note = get_note($note_id);
+    if (!$note) {
+        return false;
+    }
+
+    if (!empty($note['owner']) && (int) $note['owner'] === $user_id) {
+        return true;
+    }
+
+    return false;
 }

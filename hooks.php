@@ -61,14 +61,14 @@ class hooks_ksf_FA_Notes extends hooks {
      * @return array [0] => $security_areas, [1] => $security_sections
      */
     function install_access() {
-        $security_sections[SS_ksf_FA_Notes] = _("");
-        $security_areas['SA_ksf_FA_NotesVIEW'] = array(
+        $security_sections[SS_ksf_FA_Notes] = _("Notes");
+        $security_areas['SA_NOTES_VIEW'] = array(
             SS_ksf_FA_Notes | 1, 
-            _("View ")
+            _("View notes")
         );
-        $security_areas['SA_ksf_FA_NotesMANAGE'] = array(
+        $security_areas['SA_NOTES_MANAGE'] = array(
             SS_ksf_FA_Notes | 2, 
-            _("Manage ")
+            _("Manage notes")
         );
         return array($security_areas, $security_sections);
     }

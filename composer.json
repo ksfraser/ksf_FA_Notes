@@ -1,0 +1,22 @@
+{
+    "name": "ksfraser/ksf-fa-notes",
+    "description": "FA module for Notes/Comments management with multi-entity linking, ACL, and OCR",
+    "type": "fa-module",
+    "license": "GPL-3.0",
+    "require": {
+        "php": ">=7.4"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^9.6"
+    },
+    "autoload": {
+        "files": [
+            "includes/notes_db.inc"
+        ]
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true,
+    "config": {
+        "process-timeout": 0
+    }
+}
