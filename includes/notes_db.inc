@@ -53,7 +53,16 @@ function add_note($entity_id, $entity_type, $note, $note_type = 'Comment', $crea
     db_query($sql, "Could not add note");
     $note_id = db_insert_id();
     
-    notes_after_hook('after_save', $note_id, ['entity_type' => 'note', 'action' => 'create', 'entity_id' => $entity_id, 'entity_ref_type' => $entity_type, 'note_type' => $note_type]);
+    notes_after_hook('after_save', $note_id, ['entity_type' => 'note', 'action' => 'create', 'data' => [
+        'id'          => $note_id,
+        'entity_id'   => $entity_id,
+        'entity_type' => $entity_type,
+        'note_type'   => $note_type,
+        'note'        => $note,
+        'created_by'  => $created_by,
+        'owner'       => $owner,
+        'group_id'    => $group_id,
+    ]]);
     
     return $note_id;
 }
@@ -116,7 +125,11 @@ function update_note($note_id, $note, $note_type = null)
 
     db_query($sql, "Could not update note");
     
-    notes_after_hook('after_save', $note_id, ['entity_type' => 'note', 'action' => 'update']);
+    notes_after_hook('after_save', $note_id, ['entity_type' => 'note', 'action' => 'update', 'data' => [
+        'note_id'   => $note_id,
+        'note'      => $note,
+        'note_type' => $note_type,
+    ]]);
 }
 
 function delete_note($note_id)
@@ -128,7 +141,7 @@ function delete_note($note_id)
     db_query($sql, "Could not delete note");
     
     if ($old) {
-        notes_after_hook('after_delete', $note_id, ['entity_type' => 'note', 'entity_id' => $old['entity_id'], 'entity_ref_type' => $old['entity_type']]);
+        notes_after_hook('after_delete', $note_id, ['entity_type' => 'note', 'data' => $old]);
     }
 }
 
