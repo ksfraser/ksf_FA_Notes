@@ -248,17 +248,59 @@ When the OCR service is unreachable, the file upload proceeds without OCR. The e
 
 ## Event Dispatching
 
-The module dispatches events for integration with other ksf modules and FA hooks:
+The module uses generic SuiteCRM-style lifecycle hooks with `entity_type` and `action` in the payload.
+Events are dispatched via `includes/events.inc` and broadcast via `hook_invoke_all`/`hook_invoke_first`.
 
-| Event | Data | Trigger |
-|-------|------|---------|
-| `note_added` | `['note_id', 'entity_id', 'entity_type']` | After INSERT |
-| `note_updated` | `['note_id']` | After UPDATE |
-| `note_deleted` | `['note_id', 'entity_id', 'entity_type']` | After DELETE |
-| `note_linked` | `['note_id', 'entity_type', 'entity_id']` | After link INSERT |
-| `note_unlinked` | `['note_id', 'entity_type', 'entity_id']` | After link DELETE |
-| `note_file_attached` | `['note_id', 'attachment_id', 'ocr_performed']` | After file stored |
-| `note_ocr_completed` | `['note_id', 'ocr_attachment_id', 'text_length']` | After OCR text stored |
+### Generic Lifecycle Hooks
+
+| Hook Name | Direction | entity_type | action | Fired |
+|-----------|-----------|-------------|--------|-------|
+| `before_save` | hook_invoke_first (filter) | `note` | `create` | Before note INSERT |
+| `after_save` | hook_invoke_all | `note` | `create` | After note INSERT |
+| `before_save` | hook_invoke_first | `note` | `update` | Before note UPDATE |
+| `after_save` | hook_invoke_all | `note` | `update` | After note UPDATE |
+| `before_delete` | hook_invoke_first | `note` | — | Before note DELETE |
+| `after_delete` | hook_invoke_all | `note` | — | After note DELETE |
+| `after_load` | hook_invoke_first | `note` | `load` | After note DB fetch |
+| `before_save` | hook_invoke_first | `note_link` | `create` | Before link INSERT |
+| `after_save` | hook_invoke_all | `note_link` | `create` | After link INSERT |
+| `before_delete` | hook_invoke_first | `note_link` | — | Before link DELETE |
+| `after_delete` | hook_invoke_all | `note_link` | — | After link DELETE |
+
+### Entity Type Registration
+
+The hooks class implements `_getAdvertisedValues()` via `HookQueryProviderTrait`:
+
+```
+notes.entity_types → ['note', 'note_link']
+notes.events      → ['before_save', 'after_save', 'before_delete', 'after_delete', 'after_load']
+```
+
+### Payload Structure
+
+```php
+$payload = [
+    'event'       => 'after_save',
+    'module'      => 'notes',
+    'entity_type' => 'note',
+    'entity_id'   => $noteId,
+    'action'      => 'create',
+    'timestamp'   => date('Y-m-d H:i:s'),
+    // ... entity-specific fields
+];
+
+// Dual dispatch:
+hook_invoke_all('after_save', $payload);
+hook_invoke_all('ksf_crud_event', $payload);  // Workflow integration
+```
+
+### After-Load Enrichment
+
+```php
+$payload = ['entity_type' => 'note', 'action' => 'load', 'data' => $row];
+$modified = hook_invoke_first('after_load', $payload);
+$row = $modified['data'] ?? $modified;
+```
 
 ## Schema Migration
 

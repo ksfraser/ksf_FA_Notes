@@ -4,17 +4,31 @@
  */
 
 /**
- * notes_dispatch_event() is now in includes/events.inc.
- * This file is kept for backward compatibility with code that loaded this file
- * before the events.inc refactor.
+ * Event dispatching — see includes/events.inc for implementation
  */
-if (!function_exists('notes_dispatch_event')) {
-    require_once __DIR__ . '/events.inc';
-}
+require_once __DIR__ . '/events.inc';
 
 function add_note($entity_id, $entity_type, $note, $note_type = 'Comment', $created_by = null, $owner = null, $group_id = null)
 {
     $created_by = $created_by ?? $_SESSION['wa_current_user']->name ?? 'system';
+    
+    // Allow before-hook to modify or validate
+    $hookData = notes_before_hook('before_save', array_merge(['entity_type' => 'note', 'action' => 'create'], [
+        'entity_id'   => $entity_id,
+        'entity_type' => $entity_type,
+        'note'        => $note,
+        'note_type'   => $note_type,
+        'created_by'  => $created_by,
+        'owner'       => $owner,
+        'group_id'    => $group_id,
+    ]));
+    $entity_id = $hookData['entity_id'];
+    $entity_type = $hookData['entity_type'];
+    $note = $hookData['note'];
+    $note_type = $hookData['note_type'];
+    $created_by = $hookData['created_by'];
+    $owner = array_key_exists('owner', $hookData) ? $hookData['owner'] : $owner;
+    $group_id = array_key_exists('group_id', $hookData) ? $hookData['group_id'] : $group_id;
     
     $columns = "entity_id, entity_type, note_type, note, created_by";
     $values = db_escape($entity_id) . ",
@@ -39,7 +53,7 @@ function add_note($entity_id, $entity_type, $note, $note_type = 'Comment', $crea
     db_query($sql, "Could not add note");
     $note_id = db_insert_id();
     
-    notes_dispatch_event('note_created', $note_id, ['entity_id' => $entity_id, 'entity_type' => $entity_type]);
+    notes_after_hook('after_save', $note_id, ['entity_type' => 'note', 'action' => 'create', 'entity_id' => $entity_id, 'entity_ref_type' => $entity_type, 'note_type' => $note_type]);
     
     return $note_id;
 }
@@ -48,7 +62,17 @@ function get_note($note_id)
 {
     $sql = "SELECT * FROM " . TB_PREF . "fa_crm_notes WHERE id = " . db_escape($note_id);
     $result = db_query($sql, "Could not get note");
-    return db_fetch_assoc($result);
+    $row = db_fetch_assoc($result);
+    
+    if ($row && function_exists('hook_invoke_first')) {
+        $payload = ['entity_type' => 'note', 'action' => 'load', 'data' => $row];
+        $modified = hook_invoke_first('after_load', $payload);
+        if (is_array($modified)) {
+            $row = $modified['data'] ?? $modified;
+        }
+    }
+    
+    return $row;
 }
 
 function get_notes($entity_id, $entity_type)
@@ -61,6 +85,11 @@ function get_notes($entity_id, $entity_type)
     $result = db_query($sql, "Could not get notes");
     $notes = [];
     while ($row = db_fetch_assoc($result)) {
+        if (function_exists('hook_invoke_first')) {
+            $payload = ['entity_type' => 'note', 'action' => 'load', 'data' => $row];
+            $modified = hook_invoke_first('after_load', $payload);
+            $row = is_array($modified) ? ($modified['data'] ?? $modified) : $row;
+        }
         $notes[] = $row;
     }
     return $notes;
@@ -68,6 +97,14 @@ function get_notes($entity_id, $entity_type)
 
 function update_note($note_id, $note, $note_type = null)
 {
+    $hookData = notes_before_hook('before_save', array_merge(['entity_type' => 'note', 'action' => 'update'], [
+        'note_id'   => $note_id,
+        'note'      => $note,
+        'note_type' => $note_type,
+    ]));
+    $note = $hookData['note'];
+    $note_type = array_key_exists('note_type', $hookData) ? $hookData['note_type'] : $note_type;
+    
     $sets = ["note = " . db_escape($note)];
     if ($note_type !== null) {
         $sets[] = "note_type = " . db_escape($note_type);
@@ -79,20 +116,19 @@ function update_note($note_id, $note, $note_type = null)
 
     db_query($sql, "Could not update note");
     
-    notes_dispatch_event('note_updated', $note_id, []);
+    notes_after_hook('after_save', $note_id, ['entity_type' => 'note', 'action' => 'update']);
 }
 
 function delete_note($note_id)
 {
+    notes_before_hook('before_delete', ['entity_type' => 'note', 'note_id' => $note_id]);
+    
     $old = get_note($note_id);
     $sql = "DELETE FROM " . TB_PREF . "fa_crm_notes WHERE id = " . db_escape($note_id);
     db_query($sql, "Could not delete note");
     
     if ($old) {
-        notes_dispatch_event('note_deleted', $note_id, [
-            'entity_id' => $old['entity_id'],
-            'entity_type' => $old['entity_type'],
-        ]);
+        notes_after_hook('after_delete', $note_id, ['entity_type' => 'note', 'entity_id' => $old['entity_id'], 'entity_ref_type' => $old['entity_type']]);
     }
 }
 
@@ -110,6 +146,11 @@ function search_notes($keyword, $entity_type = null, $limit = 50)
     $result = db_query($sql, "Could not search notes");
     $notes = [];
     while ($row = db_fetch_assoc($result)) {
+        if (function_exists('hook_invoke_first')) {
+            $payload = ['entity_type' => 'note', 'action' => 'load', 'data' => $row];
+            $modified = hook_invoke_first('after_load', $payload);
+            $row = is_array($modified) ? ($modified['data'] ?? $modified) : $row;
+        }
         $notes[] = $row;
     }
     return $notes;
@@ -162,6 +203,12 @@ function link_note(int $note_id, string $entity_type, int $entity_id): int
         throw new \RuntimeException("Note {$note_id} not found");
     }
 
+    notes_before_hook('before_save', array_merge(['entity_type' => 'note_link', 'action' => 'create'], [
+        'note_id'     => $note_id,
+        'entity_type' => $entity_type,
+        'entity_id'   => $entity_id,
+    ]));
+
     $sql = "INSERT IGNORE INTO " . TB_PREF . "fa_note_links
         (note_id, entity_type, entity_id)
         VALUES (" . db_escape($note_id) . ",
@@ -171,11 +218,7 @@ function link_note(int $note_id, string $entity_type, int $entity_id): int
     db_query($sql, "Could not link note to entity");
     $link_id = db_insert_id();
 
-    notes_dispatch_event('note_linked', $note_id, [
-        'entity_type' => $entity_type,
-        'entity_id'   => $entity_id,
-        'link_id'     => $link_id,
-    ]);
+    notes_after_hook('after_save', $note_id, ['entity_type' => 'note_link', 'action' => 'create', 'linked_entity_type' => $entity_type, 'linked_entity_id' => $entity_id, 'link_id' => $link_id]);
 
     return $link_id;
 }
@@ -189,6 +232,8 @@ function link_note(int $note_id, string $entity_type, int $entity_id): int
  */
 function unlink_note(int $note_id, string $entity_type, int $entity_id): void
 {
+    notes_before_hook('before_delete', ['entity_type' => 'note_link', 'note_id' => $note_id, 'linked_entity_type' => $entity_type, 'linked_entity_id' => $entity_id]);
+
     $sql = "DELETE FROM " . TB_PREF . "fa_note_links
         WHERE note_id = " . db_escape($note_id) . "
         AND entity_type = " . db_escape($entity_type) . "
@@ -196,10 +241,7 @@ function unlink_note(int $note_id, string $entity_type, int $entity_id): void
 
     db_query($sql, "Could not unlink note from entity");
 
-    notes_dispatch_event('note_unlinked', $note_id, [
-        'entity_type' => $entity_type,
-        'entity_id'   => $entity_id,
-    ]);
+    notes_after_hook('after_delete', $note_id, ['entity_type' => 'note_link', 'linked_entity_type' => $entity_type, 'linked_entity_id' => $entity_id]);
 }
 
 /**

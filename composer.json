@@ -4,7 +4,8 @@
     "type": "fa-module",
     "license": "GPL-3.0",
     "require": {
-        "php": ">=7.4"
+        "php": ">=7.4",
+        "ksfraser/traits": "*"
     },
     "require-dev": {
         "phpunit/phpunit": "^9.6"
@@ -18,5 +19,11 @@
     "prefer-stable": true,
     "config": {
         "process-timeout": 0
-    }
+    },
+    "repositories": [
+        {
+            "type": "path",
+            "url": "../Traits"
+        }
+    ]
 }

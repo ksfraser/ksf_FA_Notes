@@ -28,9 +28,16 @@
 
 define('SS_ksf_FA_Notes', 131 << 8);
 
+$autoload_path = dirname(__FILE__) . '/vendor/autoload.php';
+if (file_exists($autoload_path)) {
+    require_once $autoload_path;
+}
+
 require_once __DIR__ . '/includes/events.inc';
 
 class hooks_ksf_FA_Notes extends hooks {
+    use Ksfraser\Traits\HookQueryProviderTrait;
+
     var $module_name = 'ksf_FA_Notes';
     var $version = '1.0.0';
 
@@ -118,5 +125,13 @@ class hooks_ksf_FA_Notes extends hooks {
         if ($return_code !== 0) {
             error_log('KSF Module: composer install failed: ' . implode("\n", $output));
         }
+    }
+
+    protected function _getAdvertisedValues(): array
+    {
+        return [
+            'notes.entity_types' => ['note', 'note_link'],
+            'notes.events' => ['before_save', 'after_save', 'before_delete', 'after_delete', 'after_load'],
+        ];
     }
 }
