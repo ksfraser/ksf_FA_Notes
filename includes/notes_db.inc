@@ -3,22 +3,13 @@
  * Notes Database Functions
  */
 
-// Try to load event manager
-@include_once __DIR__ . '/../../vendor/ksfraser/event/src/Ksfraser/Event/EventManager.php';
-$use_events = class_exists('Ksfraser\Event\EventManager');
-
-function notes_dispatch_event(string $eventName, $eventData = null): void
-{
-    if ($use_events && class_exists('Ksfraser\Event\EventManager')) {
-        try {
-            \Ksfraser\Event\EventManager::dispatchEvent($eventName, $eventData);
-        } catch (Exception $e) {
-            error_log('Notes Event Error: ' . $e->getMessage());
-        }
-    }
-    if (function_exists('add_hook')) {
-        add_hook($eventName, function($data) use ($eventData) { return $eventData; });
-    }
+/**
+ * notes_dispatch_event() is now in includes/events.inc.
+ * This file is kept for backward compatibility with code that loaded this file
+ * before the events.inc refactor.
+ */
+if (!function_exists('notes_dispatch_event')) {
+    require_once __DIR__ . '/events.inc';
 }
 
 function add_note($entity_id, $entity_type, $note, $note_type = 'Comment', $created_by = null, $owner = null, $group_id = null)
@@ -48,7 +39,7 @@ function add_note($entity_id, $entity_type, $note, $note_type = 'Comment', $crea
     db_query($sql, "Could not add note");
     $note_id = db_insert_id();
     
-    notes_dispatch_event('note_added', ['note_id' => $note_id, 'entity_id' => $entity_id, 'entity_type' => $entity_type]);
+    notes_dispatch_event('note_created', $note_id, ['entity_id' => $entity_id, 'entity_type' => $entity_type]);
     
     return $note_id;
 }
@@ -88,7 +79,7 @@ function update_note($note_id, $note, $note_type = null)
 
     db_query($sql, "Could not update note");
     
-    notes_dispatch_event('note_updated', ['note_id' => $note_id]);
+    notes_dispatch_event('note_updated', $note_id, []);
 }
 
 function delete_note($note_id)
@@ -98,8 +89,7 @@ function delete_note($note_id)
     db_query($sql, "Could not delete note");
     
     if ($old) {
-        notes_dispatch_event('note_deleted', [
-            'note_id' => $note_id,
+        notes_dispatch_event('note_deleted', $note_id, [
             'entity_id' => $old['entity_id'],
             'entity_type' => $old['entity_type'],
         ]);
@@ -181,11 +171,10 @@ function link_note(int $note_id, string $entity_type, int $entity_id): int
     db_query($sql, "Could not link note to entity");
     $link_id = db_insert_id();
 
-    notes_dispatch_event('note_linked', [
-        'note_id' => $note_id,
+    notes_dispatch_event('note_linked', $note_id, [
         'entity_type' => $entity_type,
-        'entity_id' => $entity_id,
-        'link_id' => $link_id,
+        'entity_id'   => $entity_id,
+        'link_id'     => $link_id,
     ]);
 
     return $link_id;
@@ -206,6 +195,11 @@ function unlink_note(int $note_id, string $entity_type, int $entity_id): void
         AND entity_id = " . db_escape($entity_id);
 
     db_query($sql, "Could not unlink note from entity");
+
+    notes_dispatch_event('note_unlinked', $note_id, [
+        'entity_type' => $entity_type,
+        'entity_id'   => $entity_id,
+    ]);
 }
 
 /**

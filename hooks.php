@@ -28,6 +28,8 @@
 
 define('SS_ksf_FA_Notes', 131 << 8);
 
+require_once __DIR__ . '/includes/events.inc';
+
 class hooks_ksf_FA_Notes extends hooks {
     var $module_name = 'ksf_FA_Notes';
     var $version = '1.0.0';

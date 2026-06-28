@@ -9,6 +9,26 @@ function display_notes_panel($entity_id, $entity_type, $title = '', $readonly = 
     
     include_once $path_to_root . "/modules/FA_Notes/includes/notes_db.inc";
     
+    if (!$readonly && isset($_POST['add_note']) && !empty($_POST['new_note'])) {
+        $note_id = add_note($entity_id, $entity_type, $_POST['new_note'], $_POST['new_note_type'] ?? 'Comment');
+        
+        if (isset($_FILES['new_attachment']) && $_FILES['new_attachment']['error'] === UPLOAD_ERR_OK) {
+            $file = $_FILES['new_attachment'];
+            if (function_exists('hook_invoke_first')) {
+                hook_invoke_first('note_upload_attachment', [
+                    'note_id'     => $note_id,
+                    'entity_type' => $entity_type,
+                    'entity_id'   => $entity_id,
+                    'filename'    => $file['name'],
+                    'file_path'   => $file['tmp_name'],
+                    'file_size'   => $file['size'],
+                    'mime_type'   => $file['type'],
+                    'uploaded_by' => $_SESSION['wa_current_user']->name ?? 'system',
+                ]);
+            }
+        }
+    }
+    
     $notes = get_notes($entity_id, $entity_type);
     $types = ['Comment' => _('Comment'), 'Internal' => _('Internal'), 'Public' => _('Public')];
     
@@ -23,6 +43,7 @@ function display_notes_panel($entity_id, $entity_type, $title = '', $readonly = 
         
         $note_types = ['Comment' => _('Comment'), 'Internal' => _('Internal'), 'Public' => _('Public')];
         select_row(_("Type:"), 'new_note_type', 'Comment', $note_types);
+        file_row(_("Attachment:"), 'new_attachment', '');
         end_table();
         
         submit_center('add_note', _("Add Note"), true);
