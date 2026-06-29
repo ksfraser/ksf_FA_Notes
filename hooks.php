@@ -91,15 +91,42 @@ class hooks_ksf_FA_Notes extends hooks {
      */
     function activate_extension($company, $check_only=true) {
         $this->ensure_composer_dependencies();
-        
-        // Apply sql/install.sql using update_databases()
-        // This handles @TB_PREF@ replacement automatically
-        if (file_exists(dirname(__FILE__) . '/sql/install.sql')) {
-            $updates = array('install.sql' => array($this->module_name));
-            return $this->update_databases($company, $updates, $check_only);
-        }
-        
+        $this->install_schema();
         return true;
+    }
+
+    private function install_schema() {
+        $sql_file = dirname(__FILE__) . '/sql/install.sql';
+        if (!file_exists($sql_file)) {
+            return;
+        }
+
+        $sql = file_get_contents($sql_file);
+        if ($sql === false || $sql === '') {
+            return;
+        }
+
+        $statements = explode(';', $sql);
+        foreach ($statements as $stmt) {
+            $stmt = trim($stmt);
+            if ($stmt === '') {
+                continue;
+            }
+            $lines = explode("\n", $stmt);
+            $first_sql = '';
+            foreach ($lines as $line) {
+                $line = trim($line);
+                if ($line === '' || strncmp($line, '--', 2) === 0) {
+                    continue;
+                }
+                $first_sql = $line;
+                break;
+            }
+            $err_msg = preg_match('/^\s*(ALTER|INSERT)\s+/i', $first_sql)
+                ? null
+                : 'Could not execute ksf_FA_Notes schema statement';
+            db_query($stmt, $err_msg);
+        }
     }
 
     /**

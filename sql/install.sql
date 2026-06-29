@@ -1,12 +1,12 @@
 -- ksf_FA_Notes Module Schema
 
 -- Add ACL columns to fa_crm_notes
-ALTER TABLE `@TB_PREF@fa_crm_notes`
+ALTER TABLE `0_fa_crm_notes`
     ADD COLUMN `owner` INT NULL COMMENT 'FK to FA users',
     ADD COLUMN `group_id` INT NULL COMMENT 'Access group ID for RBAC';
 
 -- Multi-entity link table
-CREATE TABLE IF NOT EXISTS `@TB_PREF@fa_note_links` (
+CREATE TABLE IF NOT EXISTS `0_fa_note_links` (
     `id`            INT           NOT NULL AUTO_INCREMENT,
     `note_id`       INT           NOT NULL  COMMENT 'FK to fa_crm_notes.id',
     `entity_type`   VARCHAR(64)   NOT NULL  COMMENT 'Entity type (debtor, contact, opportunity, etc.)',
