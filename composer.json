@@ -5,9 +5,9 @@
     "license": "GPL-3.0",
     "require": {
         "php": ">=7.4",
-        "ksfraser/traits": "*",
-        "ksfraser/html": "dev-fix/constructor-compatibility",
-        "ksfraser/ksf-fa-common": "^1.0"
+        "ksfraser/traits": "^1.2",
+        "ksfraser/ksf-fa-common": "^1.0",
+        "ksfraser/html": "dev-fix/constructor-compatibility"
     },
     "require-dev": {
         "phpunit/phpunit": "^9.6"
@@ -25,10 +25,5 @@
             "php": "7.4.33"
         }
     },
-    "repositories": [
-        {
-            "type": "path",
-            "url": "../Traits"
-        }
-    ]
+    "repositories": []
 }
