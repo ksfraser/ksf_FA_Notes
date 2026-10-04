@@ -247,14 +247,14 @@ class NotesSqlTest extends TestCase
 
     public function testWriteDefaultsCreatedByToTheLoggedInUser(): void
     {
-        $GLOBALS['user'] = array('id' => 'kevin');
+        $_SESSION['wa_current_user'] = (object) array('loginname' => 'kevin');
 
         try {
             FaDbFake::$insertId = 1;
             notes_write(array('note' => 'body'));
             $this->assertStringContainsString("'kevin'", FaDbFake::onlyQuery());
         } finally {
-            unset($GLOBALS['user']);
+            unset($_SESSION['wa_current_user']);
         }
     }
 

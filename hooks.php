@@ -15,8 +15,10 @@
  *    Include add_extensions() to load other modules' install_options.
  *
  * 2. ADDING MENU ITEMS TO EXISTING APPS
- *    Use install_options() with switch($app->id).
- *    Use add_module_app() + add_rapp_function() for new menu sections.
+   *    Use install_options() guarded on $app->id.
+   *    Register a menu section with $app->add_module() then
+   *    $app->add_rapp_function($level, $label, $path, 'SA_SOMETHING_VIEW');
+   *    The access arg is the STRING security-area name, not the SA_* constant.
  *
  * 3. DATABASE SCHEMA
  *    DO NOT create tables in PHP code.
@@ -94,12 +96,11 @@ class hooks_ksf_FA_Notes extends hooks {
     var $module_name = 'ksf_FA_Notes';
     var $version = '2.4.3-0';
 
-    public function __construct()
-    {
-        parent::__construct();
-
-        $this->registerWorkflowType('note', 'NOTES_NOTE');
-    }
+    // Note: no __construct. FA's base hooks class has none, and FA instantiates
+    // the module class once per request from inst_module.php / the activation
+    // handler. A constructor that calls parent::__construct() would fatal on
+    // "Cannot call constructor" and take the whole extensions page down with it.
+    // registerWorkflowType() is called from activate_extension() instead.
 
     /**
      * Add module tab.
@@ -121,14 +122,36 @@ class hooks_ksf_FA_Notes extends hooks {
      * @return void
      */
     function install_options($app) {
-        if ($app->id == 'orders' && method_exists($this, 'add_module_app')) {
-            $this->add_module_app(
-                'notes',
-                _("Notes"),
-                'modules/ksf_FA_Notes/pages/notes.php',
-                SA_NOTES_VIEW
-            );
+        if ($app->id != 'orders') {
+            return;
         }
+
+        // Find the "Notes" module level on this app (or add it if it isn't
+        // there yet). add_module() returns the module object, whose index in
+        // $app->modules is the $level add_rapp_function() wants.
+        $level = null;
+        foreach ($app->modules as $idx => $mod) {
+            if ($mod->name === _("Notes")) {
+                $level = $idx;
+                break;
+            }
+        }
+        if ($level === null) {
+            $app->add_module(_("Notes"));
+            $level = count($app->modules) - 1;
+        }
+
+        // add_rapp_function() stores this verbatim; the theme renderer later
+        // passes it to can_access_page(), which uses it as a STRING key into
+        // $security_areas. Pass the name, not the SA_* numeric constant.
+        // The link is webroot-relative: menu_link() (ui_controls.inc) prepends
+        // $path_to_root itself, so do NOT add it here (matches FA core items).
+        $app->add_rapp_function(
+            $level,
+            _("Notes"),
+            'modules/ksf_FA_Notes/pages/notes.php',
+            'SA_NOTES_VIEW'
+        );
     }
 
     /**
@@ -162,6 +185,11 @@ class hooks_ksf_FA_Notes extends hooks {
         }
 
         $this->ensure_composer_dependencies();
+
+        // Register the note record type for the workflow trait on this instance.
+        // Idempotent, and must run here rather than in a constructor (see the
+        // note above the $version property).
+        $this->registerWorkflowType('note', 'NOTES_NOTE');
 
         // One entry per table, each gated on its own table name. update_databases()
         // builds the path itself as <path_to_root>/modules/<module_name>/sql/<file>,

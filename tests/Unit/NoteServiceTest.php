@@ -95,13 +95,13 @@ class NoteServiceTest extends TestCase
     public function testCreateDefaultsCreatedByToTheLoggedInUser(): void
     {
         FaDbFake::$insertId = 6;
-        $GLOBALS['user'] = array('id' => 'kevin');
+        $_SESSION['wa_current_user'] = (object) array('loginname' => 'kevin');
 
         (new NoteCreationService())->create(array('note' => 'body'));
 
         $this->assertStringContainsString("'kevin'", FaDbFake::onlyQuery());
 
-        unset($GLOBALS['user']);
+        unset($_SESSION['wa_current_user']);
     }
 
     public function testFindRequiresANoteId(): void

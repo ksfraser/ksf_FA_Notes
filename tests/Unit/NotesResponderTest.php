@@ -388,15 +388,82 @@ class NotesResponderTest extends TestCase
 
     public function testMenuEntryIsAddedToTheOrdersApp(): void
     {
-        $app = new \stdClass();
-        $app->id = 'orders';
+        $app = $this->fakeApp('orders');
 
         $this->hooks->install_options($app);
 
-        $this->assertCount(1, \hooks::$addedApps);
-        $this->assertSame('notes', \hooks::$addedApps[0]['id']);
-        $this->assertSame('modules/ksf_FA_Notes/pages/notes.php', \hooks::$addedApps[0]['page']);
-        $this->assertSame(SA_NOTES_VIEW, \hooks::$addedApps[0]['access']);
+        $this->assertCount(1, $app->modules, 'a Notes module section is registered');
+        $this->assertSame(_('Notes'), $app->modules[0]->name);
+        $this->assertCount(1, $app->rappFunctions);
+        $this->assertSame('Notes', $app->rappFunctions[0]['label']);
+        $this->assertSame('modules/ksf_FA_Notes/pages/notes.php', $app->rappFunctions[0]['link']);
+        // The renderer uses this as a string key into $security_areas, so it
+        // must be the area NAME, not the SA_* numeric constant.
+        $this->assertSame('SA_NOTES_VIEW', $app->rappFunctions[0]['access']);
+    }
+
+    public function testMenuEntryIsSkippedForOtherApps(): void
+    {
+        $app = $this->fakeApp('GL');
+
+        $this->hooks->install_options($app);
+
+        $this->assertCount(0, $app->modules);
+        $this->assertCount(0, $app->rappFunctions);
+    }
+
+    public function testExistingNotesModuleIsReusedNotDuplicated(): void
+    {
+        $app = $this->fakeApp('orders');
+        // Simulate the Notes section already being present on the app.
+        $existing = new \stdClass();
+        $existing->name = _('Notes');
+        $app->modules[] = $existing;
+
+        $this->hooks->install_options($app);
+
+        $this->assertCount(1, $app->modules, 'no second Notes module is added');
+        $this->assertCount(1, $app->rappFunctions);
+        $this->assertSame(0, $app->rappFunctions[0]['level'], 'the function lands on the existing module level');
+    }
+
+    /**
+     * A stand-in for FA's application object, recording add_module() and
+     * add_rapp_function() the way install_options() uses them.
+     *
+     * @param string $id
+     * @return object
+     */
+    private function fakeApp($id)
+    {
+        return new class($id) {
+            public $id;
+            public $modules = array();
+            public $rappFunctions = array();
+
+            public function __construct($id)
+            {
+                $this->id = $id;
+            }
+
+            public function add_module($name)
+            {
+                $mod = new \stdClass();
+                $mod->name = $name;
+                $this->modules[] = $mod;
+                return $mod;
+            }
+
+            public function add_rapp_function($level, $label, $link, $access = 'SA_OPEN', $category = '')
+            {
+                $this->rappFunctions[] = array(
+                    'level' => $level,
+                    'label' => $label,
+                    'link' => $link,
+                    'access' => $access,
+                );
+            }
+        };
     }
 
     public function testNoMenuEntryIsAddedToOtherApps(): void

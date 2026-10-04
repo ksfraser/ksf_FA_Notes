@@ -237,8 +237,11 @@ function notes_write(array $data)
     // Author defaults to the logged-in user, but only on insert: notes_prepare()
     // is shared with the update path, where created_by is the original author
     // and must never be overwritten by whoever last edited the note.
-    if (!isset($data['created_by']) && isset($GLOBALS['user']['id'])) {
-        $data['created_by'] = $GLOBALS['user']['id'];
+    if (!isset($data['created_by'])) {
+        $author = notes_current_user_loginname();
+        if ($author !== '') {
+            $data['created_by'] = $author;
+        }
     }
 
     if (function_exists('notes_before_hook')) {

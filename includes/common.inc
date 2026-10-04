@@ -57,6 +57,29 @@ function notes_now()
 }
 
 /**
+ * The logged-in FA user's login name, or '' when no session user is present.
+ *
+ * FA exposes the session user as $_SESSION['wa_current_user']; this build has
+ * no $GLOBALS['user'] (the earlier assumption), so both the page and the
+ * CREATE_NOTE service stamp created_by / default the owner from here.
+ *
+ * @return string
+ * @since 1.0.0
+ */
+function notes_current_user_loginname()
+{
+    $user = isset($_SESSION['wa_current_user']) ? $_SESSION['wa_current_user'] : null;
+
+    if ($user === null) {
+        return '';
+    }
+
+    $name = trim((string) (@$user->loginname));
+
+    return $name !== '' ? $name : (string) (@$user->username);
+}
+
+/**
  * Build the SET clause of an UPDATE from a whitelisted field map.
  *
  * @param array $data Field => value, already filtered to known columns

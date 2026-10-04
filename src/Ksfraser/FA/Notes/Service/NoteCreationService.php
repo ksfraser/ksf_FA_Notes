@@ -67,7 +67,8 @@ final class NoteCreationService
         }
 
         if (!isset($payload['created_by'])) {
-            $payload['created_by'] = isset($GLOBALS['user']['id']) ? $GLOBALS['user']['id'] : null;
+            $author = notes_current_user_loginname();
+            $payload['created_by'] = $author !== '' ? $author : null;
         }
 
         return $payload;

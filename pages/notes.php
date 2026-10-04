@@ -17,7 +17,7 @@
  */
 
 $page_security = 'SA_NOTES_VIEW';
-$path_to_root = '../..';
+$path_to_root = '../../..';
 
 include_once($path_to_root . '/includes/session.inc');
 add_access_extensions();
@@ -44,8 +44,8 @@ use ksfraser\FrontAccounting\Notes\View\NoteSummaryTableView;
 
 $options = new EntityOptionsProvider(notes_entity_types());
 $noteTypes = notes_note_types();
-$currentUserId = (string) ($_SESSION['user'] ?? '');
-$currentUserName = (string) (user_name() ?: $currentUserId);
+$currentUserId = (string) ($_SESSION['wa_current_user']->loginname ?? '');
+$currentUserName = notes_current_user_name();
 
 $view = notes_page_param('view', 'summary');
 $action = notes_page_param('action', '');
@@ -55,7 +55,7 @@ $action = notes_page_param('action', '');
 // the summary table hid the button.
 
 if ($action !== '') {
-    if (!check_security('SA_NOTES_MANAGE')) {
+    if (!$_SESSION['wa_current_user']->can_access('SA_NOTES_MANAGE')) {
         display_error(_('You do not have permission to change notes'), -1);
         exit;
     }
@@ -77,15 +77,25 @@ if ($action !== '') {
         display_notification($removed ? _('Attachment removed') : _('Attachment was not found'));
         $view = 'form';
     } elseif ($action === 'create' || $action === 'update') {
+        $owner = notes_page_param('owner', '');
         $data = array(
             'subject' => notes_page_param('subject', ''),
             'note' => notes_page_param('notes_note', ''),
             'note_type' => notes_page_param('note_type', ''),
-            'owner' => notes_page_param('owner', ''),
+            'owner' => $owner,
             'inactive' => notes_page_param('inactive_present', '') !== '' ? 1 : 0,
         );
 
         if ($action === 'create') {
+            // A new note belongs to whoever wrote it unless they named someone
+            // else; the "my notes" owner filter keys off this value.
+            if ($owner === '') {
+                $data['owner'] = $currentUserId;
+            }
+            // Record the author once, at creation; notes_update() never touches
+            // created_by, so the original author survives later edits.
+            $data['created_by'] = $currentUserId;
+
             $newId = notes_write($data);
             if ($newId > 0) {
                 notes_page_apply_links($newId, $options);
@@ -181,6 +191,21 @@ function notes_page_param(string $name, $default = '')
 }
 
 /**
+ * The logged-in user's display name: real_name when set, otherwise the login
+ * name. FA exposes these on $_SESSION['wa_current_user']; there is no
+ * global user_name() helper in this FA build.
+ *
+ * @return string
+ */
+function notes_current_user_name()
+{
+    $user = $_SESSION['wa_current_user'];
+    $name = trim((string) (@$user->name));
+
+    return $name !== '' ? $name : (string) (@$user->loginname);
+}
+
+/**
  * Save the attachments chosen in the form, adding new ones and dropping the
  * ones the user cleared.
  *
@@ -236,7 +261,7 @@ function notes_page_owner_options(string $currentUserId): array
     $owners = array();
 
     if ($currentUserId !== '') {
-        $owners[$currentUserId] = user_name() ?: $currentUserId;
+        $owners[$currentUserId] = notes_current_user_name();
     }
 
     foreach (notes_sql_owners() as $owner) {
