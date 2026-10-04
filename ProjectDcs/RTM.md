@@ -1,4 +1,10 @@
-# Requirements Traceability Matrix (RTM) - ksf_FA_Notes
+RTM (v1, retired) - ksf_FA_Notes
+
+> **SUPERSEDED — see `RTM-as-built.md`.**
+>
+> This document describes the retired v1 design. The current
+> requirements are keyed `FR-NT-001-001` … `FR-NT-001-010` and match
+> the `@BABOK Related:` annotations in the code. Historical only.
 
 ## Overview
 

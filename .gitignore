@@ -1,2 +1,12 @@
 # Composer dependencies
 vendor/
+
+# Test artefacts
+.phpunit.result.cache
+.phpunit.cache/
+
+# Editor / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store

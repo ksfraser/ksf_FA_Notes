@@ -1,107 +1,249 @@
 <?php
 /**
- * Notes Management Page
+ * Notes page.
+ *
+ * A dispatcher and nothing else: it decides which view to show, enforces the
+ * security areas, and hands the view classes plain data. All rendering lives in
+ * src/Ksfraser/FA/Notes/View, all SQL in includes/ksf_notes_*.inc.
+ *
+ * Routes:
+ *   (default)                    summary table
+ *   view=summary                 summary table
+ *   view=form                    data-entry form for a new note
+ *   view=form&edit_id=<id>       data-entry form for an existing note
+ *   action=create|update         POST from the form
+ *   action=unlink                remove one attachment
+ *   action=delete                delete a note
  */
 
-$page_security = 'SA_CUSTOMER';
-$path_to_root = "../..";
+$page_security = 'SA_NOTES_VIEW';
+$path_to_root = '../..';
 
-include_once($path_to_root . "/includes/session.inc");
-include_once($path_to_root . "/includes/ui.inc");
-include_once($path_to_root . "/modules/FA_Notes/includes/notes_db.inc");
+include_once($path_to_root . '/includes/session.inc');
+add_access_extensions();
 
-page(_("Notes Management"));
+$autoload = __DIR__ . '/../vendor/autoload.php';
+if (!file_exists($autoload)) {
+    display_error(_('Notes dependencies are not installed'));
+    exit;
+}
+require_once $autoload;
 
-$selected_id = get_post('note_id', '');
-$entity_filter = $_POST['entity_type'] ?? '';
-$action = $_POST['action'] ?? '';
+require_once __DIR__ . '/../includes/entity_types.inc';
+require_once __DIR__ . '/../includes/common.inc';
+require_once __DIR__ . '/../includes/ksf_notes_db.inc';
+require_once __DIR__ . '/../includes/ksf_notes_link_db.inc';
+
+use ksfraser\FrontAccounting\Notes\DTO\NotesFilter;
+use ksfraser\FrontAccounting\Notes\Entity\EntityOptionsProvider;
+use ksfraser\FrontAccounting\Notes\View\NoteFormView;
+use ksfraser\FrontAccounting\Notes\View\NoteSummaryTableView;
 
 //--------------------------------------------------------------------------------
+// Wiring, shared by both views.
 
-if ($action === 'delete' && $selected_id) {
-    delete_note($selected_id);
-    display_notification(_("Note deleted"));
-}
+$options = new EntityOptionsProvider(notes_entity_types());
+$noteTypes = notes_note_types();
+$currentUserId = (string) ($_SESSION['user'] ?? '');
+$currentUserName = (string) (user_name() ?: $currentUserId);
 
-if (isset($_POST['add_note']) || isset($_POST['save_note'])) {
-    $entity_id = $_POST['entity_id'];
-    $entity_type = $_POST['entity_type'];
-    $note = $_POST['note'];
-    $note_type = $_POST['note_type'] ?? 'Comment';
-    
-    if ($entity_id && $entity_type && $note) {
-        add_note($entity_id, $entity_type, $note, $note_type);
-        display_notification(_("Note added"));
+$view = notes_page_param('view', 'summary');
+$action = notes_page_param('action', '');
+
+//--------------------------------------------------------------------------------
+// Mutating routes. Each one checks SA_NOTES_MANAGE rather than trusting that
+// the summary table hid the button.
+
+if ($action !== '') {
+    if (!check_security('SA_NOTES_MANAGE')) {
+        display_error(_('You do not have permission to change notes'), -1);
+        exit;
     }
-}
 
-if (isset($_POST['update_note'])) {
-    $note_id = $_POST['note_id'];
-    $note = $_POST['note'];
-    $note_type = $_POST['note_type'] ?? null;
-    
-    update_note($note_id, $note, $note_type);
-    display_notification(_("Note updated"));
-}
+    $noteId = (int) notes_page_param('edit_id', notes_page_param('note_id', 0));
 
-//--------------------------------------------------------------------------------
-
-start_form();
-
-start_table(TABLESTYLE, "width=50%");
-table_section_title(_("Search Notes"));
-
-text_row_ex(_("Keyword:"), 'keyword', 30);
-select_row(_("Entity Type:"), 'entity_type', $entity_filter, [
-    '' => _('All'),
-    'debtor' => _('Customer'),
-    'contact' => _('Contact'),
-    'opportunity' => _('Opportunity'),
-    'ticket' => _('Ticket'),
-    'call_log' => _('Call Log'),
-    'lead' => _('Lead'),
-]);
-submit_row('search', _("Search"), true);
-
-end_table();
-
-end_form();
-
-//--------------------------------------------------------------------------------
-
-if (isset($_POST['search'])) {
-    $keyword = $_POST['keyword'];
-    $entity_type = $_POST['entity_type'];
-    
-    echo '<h3>' . _('Search Results') . '</h3>';
-    
-    $notes = search_notes($keyword, $entity_type);
-    
-    if (empty($notes)) {
-        echo '<p>' . _('No notes found') . '</p>';
-    } else {
-        start_table(TABLESTYLE, "width=90%");
-        table_header([
-            _("Entity"), _("Type"), _("Note"), _("Created By"), _("Date"), _("Actions")
-        ]);
-        
-        foreach ($notes as $note) {
-            $entity_label = $note['entity_type'] . ' #' . $note['entity_id'];
-            
-            label_cell($entity_label);
-            label_cell($note['note_type']);
-            label_cell(mb_substr($note['note'], 0, 100) . (mb_strlen($note['note']) > 100 ? '...' : ''));
-            label_cell($note['created_by']);
-            label_cell(sql2date($note['created_at']));
-            
-            $delete_url = "?note_id=" . $note['id'] . "&action=delete";
-            delete_button_center($delete_url, _("Delete"));
-            
-            end_row();
+    if ($action === 'delete') {
+        if ($noteId > 0 && notes_delete($noteId)) {
+            display_notification(_('Note deleted'));
         }
-        
-        end_table();
+        $view = 'summary';
+    } elseif ($action === 'unlink') {
+        $removed = notes_link_delete(
+            $noteId,
+            notes_page_param('unlink_type', ''),
+            notes_page_param('unlink_id', ''),
+            notes_page_param('unlink_role', '') ?: null
+        );
+        display_notification($removed ? _('Attachment removed') : _('Attachment was not found'));
+        $view = 'form';
+    } elseif ($action === 'create' || $action === 'update') {
+        $data = array(
+            'subject' => notes_page_param('subject', ''),
+            'note' => notes_page_param('notes_note', ''),
+            'note_type' => notes_page_param('note_type', ''),
+            'owner' => notes_page_param('owner', ''),
+            'inactive' => notes_page_param('inactive_present', '') !== '' ? 1 : 0,
+        );
+
+        if ($action === 'create') {
+            $newId = notes_write($data);
+            if ($newId > 0) {
+                notes_page_apply_links($newId, $options);
+                display_notification(_('Note created'));
+            } else {
+                display_error(_('Could not create the note'));
+            }
+        } else {
+            $updated = notes_update($noteId, $data);
+            if ($updated !== false) {
+                notes_page_apply_links($noteId, $options);
+                display_notification(_('Note updated'));
+            }
+        }
+
+        $view = 'form';
     }
 }
+
+//--------------------------------------------------------------------------------
+// Summary table. Opens on the logged-in user's own notes.
+
+if ($view === 'summary') {
+    page(_('Notes'));
+
+    $filter = NotesFilter::fromRequest($currentUserId);
+    $notes = notes_get_all($filter->toCriteria());
+
+    foreach ($notes as $key => $note) {
+        $notes[$key]['links'] = notes_link_resolve(
+            notes_link_get_by_note((int) $note['id'])
+        );
+    }
+
+    $owners = notes_page_owner_options($currentUserId);
+
+    (new NoteSummaryTableView(
+        $options,
+        $notes,
+        $filter,
+        $noteTypes,
+        $currentUserId,
+        $currentUserName,
+        $owners
+    ))->render();
+
+    end_page();
+    exit;
+}
+
+//--------------------------------------------------------------------------------
+// Data-entry form.
+
+page(_('Note'));
+
+$noteId = (int) notes_page_param('edit_id', 0);
+$note = $noteId > 0 ? notes_get($noteId) : null;
+
+if ($noteId > 0 && !$note) {
+    display_error(_('That note does not exist'));
+    exit;
+}
+
+$formView = new NoteFormView($options, notes_entity_types(), $noteTypes, 'notes.php?view=form');
+
+echo $formView->currentLinks(
+    $noteId > 0 ? notes_link_resolve(notes_link_get_by_note($noteId)) : array(),
+    $noteId
+);
+
+echo $formView->render($note, $noteId > 0 ? notes_link_get_by_note($noteId) : array());
 
 end_page();
+
+/**
+ * Read a scalar request parameter from POST, falling back to GET.
+ *
+ * @param string $name    Parameter name
+ * @param mixed  $default Returned when absent
+ * @return string
+ */
+function notes_page_param(string $name, $default = '')
+{
+    if (isset($_POST[$name]) && is_scalar($_POST[$name])) {
+        return trim((string) $_POST[$name]);
+    }
+
+    if (isset($_GET[$name]) && is_scalar($_GET[$name])) {
+        return trim((string) $_GET[$name]);
+    }
+
+    return (string) $default;
+}
+
+/**
+ * Save the attachments chosen in the form, adding new ones and dropping the
+ * ones the user cleared.
+ *
+ * @param int                    $noteId Note id
+ * @param EntityOptionsProvider  $options Options provider, for the pickable types
+ * @return void
+ */
+function notes_page_apply_links(int $noteId, EntityOptionsProvider $options)
+{
+    foreach ($options->pickableTypes() as $type) {
+        $field = 'link_' . $type;
+        $chosen = isset($_POST[$field]) && is_array($_POST[$field])
+            ? array_map('strval', $_POST[$field])
+            : array();
+
+        $chosen = array_values(array_filter($chosen, function ($id) {
+            return $id !== '';
+        }));
+
+        $role = notes_page_param('role_' . $type, '') ?: null;
+
+        foreach ($chosen as $entityId) {
+            if (!notes_link_find($noteId, $type, $entityId, $role)) {
+                notes_link_add(array(
+                    'note_id' => $noteId,
+                    'entity_type' => $type,
+                    'entity_id' => $entityId,
+                    'link_role' => $role,
+                ));
+            }
+        }
+
+        $existing = notes_link_get_by_note($noteId);
+        foreach ($existing as $link) {
+            // Null role, not the form's role: a link may have been saved under a
+            // different role, and the user cleared the record from the list, so
+            // every role for it has to go.
+            if ($link['entity_type'] === $type && !in_array((string) $link['entity_id'], $chosen, true)) {
+                notes_link_delete($noteId, $type, (string) $link['entity_id']);
+            }
+        }
+    }
+}
+
+/**
+ * The owner dropdown: everyone who owns at least one note.
+ *
+ * @param string $currentUserId Logged-in user id
+ * @return array<string, string>
+ */
+function notes_page_owner_options(string $currentUserId): array
+{
+    $owners = array();
+
+    if ($currentUserId !== '') {
+        $owners[$currentUserId] = user_name() ?: $currentUserId;
+    }
+
+    foreach (notes_sql_owners() as $owner) {
+        if ($owner !== '' && !isset($owners[$owner])) {
+            $owners[$owner] = $owner;
+        }
+    }
+
+    return $owners;
+}
