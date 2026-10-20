@@ -7,9 +7,9 @@
 --   0_ksf_crm_opportunities.id  INT
 --   0_attachments.id            INT UNSIGNED
 --   0_debtors_master.debtor_no  VARCHAR
---   0_fa_pm_projects.project_id VARCHAR(20)
---   0_fa_pm_tasks.task_id       VARCHAR(20)
---   0_fa_cal_entries.id         INT
+--   0_ksf_projectmanagement_projects.project_id VARCHAR(20)
+--   0_ksf_projectmanagement_tasks.task_id       VARCHAR(20)
+--   0_ksf_calendar_entries.id         INT
 --   0_ksf_contract.id           INT   (ksf_FA_Contract, not yet built)
 --
 -- link_role records WHY a record is referenced, so a single note can express

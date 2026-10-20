@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS `0_ksf_Notes` (
 `note_type`   VARCHAR(32)   NOT NULL DEFAULT 'Comment'
                                     COMMENT 'Free text; see notes_note_types() for the offered list',
     `note`        MEDIUMTEXT    NOT NULL,
-    `created_by`  VARCHAR(50)   NULL           COMMENT 'FA user id, matches fa_cal_entries.user_id',
+    `created_by`  VARCHAR(50)   NULL           COMMENT 'FA user id, matches ksf_calendar_entries.user_id',
     `owner`       VARCHAR(50)   NULL           COMMENT 'FA user login name; drives the owner filter',
     `group_id`    INT(11)       NULL           COMMENT 'RBAC access group',
     `created_at`  DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,

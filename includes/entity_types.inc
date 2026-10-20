@@ -9,7 +9,7 @@
  *
  * entity_id is stored as VARCHAR(64) because the referenced primary keys are
  * not uniform: crm_persons/meetings/opportunities/attachments use INT ids,
- * while debtors_master.debtor_no and fa_pm_projects.project_id are VARCHAR.
+ * while debtors_master.debtor_no and ksf_projectmanagement_projects.project_id are VARCHAR.
  *
  * Any module may register an additional type, or override a built-in one, by
  * listening for the NOTES_ENTITY_TYPES hook:
@@ -103,7 +103,7 @@ function notes_entity_types()
 
         'project' => array(
             'title' => 'Project',
-            'table' => 'fa_pm_projects',
+            'table' => 'ksf_projectmanagement_projects',
             'pk' => 'project_id',
             'label' => 'name',
             'module' => 'ksf_FA_ProjectManagement',
@@ -113,7 +113,7 @@ function notes_entity_types()
 
         'task' => array(
             'title' => 'Task',
-            'table' => 'fa_pm_tasks',
+            'table' => 'ksf_projectmanagement_tasks',
             'pk' => 'task_id',
             'label' => 'name',
             'module' => 'ksf_FA_ProjectManagement',
@@ -125,7 +125,7 @@ function notes_entity_types()
         // and recurring entries all live in one table.
         'calendar' => array(
             'title' => 'Calendar Entry',
-            'table' => 'fa_cal_entries',
+            'table' => 'ksf_calendar_entries',
             'pk' => 'id',
             'label' => 'title',
             'module' => 'ksf_FA_Calendar',
