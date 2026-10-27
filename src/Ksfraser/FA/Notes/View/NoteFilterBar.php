@@ -125,7 +125,7 @@ class NoteFilterBar
 
     /**
      * @param NotesFilter $filter   Current filter
-     * @param array       $noteTypes Value => label
+     * @param array       $noteTypes Value => label for the note type dropdown
      * @return HtmlSelect
      * @since 1.0.0
      */
@@ -134,11 +134,51 @@ class NoteFilterBar
         $select = new HtmlSelect('note_type');
         $select->addOption('', _('-- any --'), $filter->noteType() === '');
 
-        foreach ($noteTypes as $value => $label) {
+        // Start with statically-defined types from providers
+        $types = $noteTypes;
+
+        // Also add all note types actually used in the database, so that types
+        // added by other modules (e.g. Square's 'square_invoice') show up
+        // even if no module has registered them via NOTES_ENTITY_TYPES.
+        $dbTypes = $this->getAllNoteTypesFromDb();
+        foreach ($dbTypes as $type) {
+            if (!isset($types[$type])) {
+                $types[$type] = $type;
+            }
+        }
+
+        foreach ($types as $value => $label) {
             $select->addOption((string) $value, $label, (string) $value === $filter->noteType());
         }
 
         return $select;
+    }
+
+    /**
+     * Get all distinct note_type values from the 0_ksf_Notes table.
+     * This ensures that types created by other modules (e.g. 'square_invoice'
+     * from ksf_FA_Square) show up in the filter even if no module has
+     * registered them via NOTES_ENTITY_TYPES.
+     *
+     * @return array<string, string> Map of type => type
+     * @since 1.0.0
+     */
+    private function getAllNoteTypesFromDb(): array
+    {
+        $types = array();
+        try {
+            $result = db_query("SELECT DISTINCT note_type FROM " . TB_PREF . "ksf_Notes WHERE note_type <> '' ORDER BY note_type");
+            if ($result) {
+                while ($row = db_fetch_assoc($result)) {
+                    if ($row !== false && !empty($row['note_type'])) {
+                        $types[(string) $row['note_type']] = (string) $row['note_type'];
+                    }
+                }
+            }
+        } catch (\Exception $e) {
+            // Silently ignore - table might not exist yet
+        }
+        return $types;
     }
 
     /**

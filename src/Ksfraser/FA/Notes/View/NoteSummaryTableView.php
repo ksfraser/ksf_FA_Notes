@@ -74,7 +74,6 @@ class NoteSummaryTableView extends AbstractListView
 
         $this->renderTableStart(array(
             _('Subject'),
-            _('Note'),
             _('Type'),
             _('Owner'),
             _('Attached to'),
@@ -132,7 +131,6 @@ class NoteSummaryTableView extends AbstractListView
 
         return array(
             $this->safeStr($subject),
-            $this->safeStr($note['note'] ?? '', 200),
             $this->safeStr($this->noteTypes[$note['note_type'] ?? ''] ?? ($note['note_type'] ?? '')),
             $this->safeStr($note['owner'] ?? ''),
             $this->attachedTo($note),
@@ -187,6 +185,29 @@ class NoteSummaryTableView extends AbstractListView
     private function actions(int $noteId): string
     {
         if ($noteId <= 0) {
+            return '';
+        }
+
+        // Find the note to check ownership
+        $note = null;
+        foreach ($this->notes as $n) {
+            if ((int) ($n['id'] ?? 0) === $noteId) {
+                $note = $n;
+                break;
+            }
+        }
+        if (!$note) {
+            return '';
+        }
+
+        // RBAC: only show Open link if user owns the note or has manage permission
+        if (!function_exists('can_access')) {
+            return '';
+        }
+        $currentUser = (string) ($_SESSION['wa_current_user']->loginname ?? '');
+        $isOwner = (string) ($note['owner'] ?? '') === $currentUser;
+        $canManage = can_access('SA_NOTES_MANAGE');
+        if (!$isOwner && !$canManage) {
             return '';
         }
 
