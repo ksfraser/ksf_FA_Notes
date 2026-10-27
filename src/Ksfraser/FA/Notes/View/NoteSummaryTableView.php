@@ -200,15 +200,15 @@ class NoteSummaryTableView extends AbstractListView
             return '';
         }
 
-        // RBAC: only show Open link if user owns the note or has manage permission
-        if (!function_exists('can_access')) {
-            return '';
-        }
-        $currentUser = (string) ($_SESSION['wa_current_user']->loginname ?? '');
-        $isOwner = (string) ($note['owner'] ?? '') === $currentUser;
-        $canManage = can_access('SA_NOTES_MANAGE');
-        if (!$isOwner && !$canManage) {
-            return '';
+        // RBAC: only show Open link if user owns the note or has manage permission.
+        // If RBAC is not active (can_access not defined), show the link to everyone.
+        if (function_exists('can_access')) {
+            $currentUser = (string) ($_SESSION['wa_current_user']->loginname ?? '');
+            $isOwner = (string) ($note['owner'] ?? '') === $currentUser;
+            $canManage = can_access('SA_NOTES_MANAGE');
+            if (!$isOwner && !$canManage) {
+                return '';
+            }
         }
 
         $html = '<a href="' . $this->safeStr($this->url('notes.php', array(

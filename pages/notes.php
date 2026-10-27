@@ -82,9 +82,11 @@ if ($action !== '') {
             'subject' => notes_page_param('subject', ''),
             'note' => notes_page_param('notes_note', ''),
             'note_type' => notes_page_param('note_type', ''),
-            'owner' => $owner,
             'inactive' => notes_page_param('inactive_present', '') !== '' ? 1 : 0,
         );
+        if ($owner !== '') {
+            $data['owner'] = $owner;
+        }
 
         if ($action === 'create') {
             // A new note belongs to whoever wrote it unless they named someone
