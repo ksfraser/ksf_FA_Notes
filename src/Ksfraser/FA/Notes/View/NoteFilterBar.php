@@ -87,6 +87,20 @@ class NoteFilterBar
 
         $div->addNested($form);
 
+        // Auto-submit form when entity_type changes to refresh entity_id dropdown
+        $js = <<<JS
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var entityTypeSelect = document.querySelector('select[name="entity_type"]');
+    if (entityTypeSelect) {
+        entityTypeSelect.addEventListener('change', function() {
+            this.form.submit();
+        });
+    }
+});
+</script>
+        $div->addNested(new HtmlString($js));
+
         return $div->getHtml();
     }
 
@@ -106,7 +120,8 @@ class NoteFilterBar
         );
 
         foreach ($owners as $id => $name) {
-            $choices[(string) $id] = $name;
+            $idStr = (string) $id;
+            $choices[$idStr] = $name;
         }
 
         $selected = $filter->ownerScope();
@@ -171,7 +186,8 @@ class NoteFilterBar
             if ($result) {
                 while ($row = db_fetch_assoc($result)) {
                     if ($row !== false && !empty($row['note_type'])) {
-                        $types[(string) $row['note_type']] = (string) $row['note_type'];
+                        $rowType = (string) $row['note_type'];
+            $types[$rowType] = $rowType;
                     }
                 }
             }

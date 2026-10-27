@@ -1,276 +1,302 @@
 <?php
+
+declare(strict_types=1);
+
+namespace ksfraser\FrontAccounting\Notes\View;
+
+use Ksfraser\HTML\Elements\HtmlDiv;
+use Ksfraser\HTML\Elements\HtmlForm;
+use Ksfraser\HTML\Elements\HtmlInput;
+use Ksfraser\HTML\Elements\HtmlLabel;
+use Ksfraser\HTML\Elements\HtmlSelect;
+use Ksfraser\HTML\Elements\HtmlString;
+use Ksfraser\FrontAccounting\Notes\DTO\NotesFilter;
+use Ksfraser\FrontAccounting\Notes\Entity\EntityOptionsProvider;
+
 /**
- * Notes page.
+ * The filter bar above the notes summary table.
  *
- * A dispatcher and nothing else: it decides which view to show, enforces the
- * security areas, and hands the view classes plain data. All rendering lives in
- * src/Ksfraser/FA/Notes/View, all SQL in includes/ksf_notes_*.inc.
+ * Offers, in one bar:
+ *   - whose notes to show, defaulting to the logged-in user and widenable to
+ *     any single user or everyone;
+ *   - free text over subject and body;
+ *   - note category;
+ *   - which kind of record the note must be attached to, and which one — both
+ *     dropdowns, the second populated from the first by the owning module.
  *
- * Routes:
- *   (default)                    summary table
- *   view=summary                 summary table
- *   view=form                    data-entry form for a new note
- *   view=form&edit_id=<id>       data-entry form for an existing note
- *   action=create|update         POST from the form
- *   action=unlink                remove one attachment
- *   action=delete                delete a note
+ * Every dropdown is filled through EntityOptionsProvider, so the record lists
+ * come from the modules that own those records.
+ *
+ * @BABOK Related: FR-NT-001-005
+ * @since 1.0.0
  */
+class NoteFilterBar
+{
+    /** @var EntityOptionsProvider */
+    private $options;
 
-$page_security = 'SA_NOTES_VIEW';
-$path_to_root = '../../..';
-
-include_once($path_to_root . '/includes/session.inc');
-add_access_extensions();
-
-$autoload = __DIR__ . '/../vendor/autoload.php';
-if (!file_exists($autoload)) {
-    display_error(_('Notes dependencies are not installed'));
-    exit;
-}
-require_once $autoload;
-
-require_once __DIR__ . '/../includes/entity_types.inc';
-require_once __DIR__ . '/../includes/common.inc';
-require_once __DIR__ . '/../includes/ksf_notes_db.inc';
-require_once __DIR__ . '/../includes/ksf_notes_link_db.inc';
-
-use ksfraser\FrontAccounting\Notes\DTO\NotesFilter;
-use ksfraser\FrontAccounting\Notes\Entity\EntityOptionsProvider;
-use ksfraser\FrontAccounting\Notes\View\NoteFormView;
-use ksfraser\FrontAccounting\Notes\View\NoteSummaryTableView;
-
-//--------------------------------------------------------------------------------
-// Wiring, shared by both views.
-
-$options = new EntityOptionsProvider(notes_entity_types());
-$noteTypes = notes_note_types();
-$currentUserId = (string) ($_SESSION['wa_current_user']->loginname ?? '');
-$currentUserName = notes_current_user_name();
-
-$view = notes_page_param('view', 'summary');
-$action = notes_page_param('action', '');
-
-//--------------------------------------------------------------------------------
-// Mutating routes. Each one checks SA_NOTES_MANAGE rather than trusting that
-// the summary table hid the button.
-
-if ($action !== '') {
-    if (!$_SESSION['wa_current_user']->can_access('SA_NOTES_MANAGE')) {
-        display_error(_('You do not have permission to change notes'), -1);
-        exit;
+    /**
+     * @param EntityOptionsProvider $options Dropdown data, from responders
+     * @since 1.0.0
+     */
+    public function __construct(EntityOptionsProvider $options)
+    {
+        $this->options = $options;
     }
 
-    $noteId = (int) notes_page_param('edit_id', notes_page_param('note_id', 0));
+    /**
+     * Render the bar.
+     *
+     * @param NotesFilter    $filter     Current filter, supplies selected values
+     * @param array          $noteTypes  Value => label for the category dropdown
+     * @param array|null     $owners     Value => label for the owner dropdown
+     * @return string HTML
+     * @since 1.0.0
+     */
+    public function render(NotesFilter $filter, array $noteTypes, ?array $owners = null): string
+    {
+        $div = new HtmlDiv('div');
+        $div->setAttribute('style', 'margin-bottom:10px;');
 
-    if ($action === 'delete') {
-        if ($noteId > 0 && notes_delete($noteId)) {
-            display_notification(_('Note deleted'));
-        }
-        $view = 'summary';
-    } elseif ($action === 'unlink') {
-        $removed = notes_link_delete(
-            $noteId,
-            notes_page_param('unlink_type', ''),
-            notes_page_param('unlink_id', ''),
-            notes_page_param('unlink_role', '') ?: null
+        $form = new HtmlForm(null);
+        $form->setAttribute('method', 'get');
+        $form->setAttribute('style', 'margin:0;');
+
+        $form->addNested(new HtmlString($this->textInput('keyword', $filter->keyword(), 24)));
+
+        $form->addNested(new HtmlString(' ' . _('Owner') . ': '));
+        $form->addNested($this->ownerSelect($filter, $owners ?? array()));
+
+        $form->addNested(new HtmlString(' ' . _('Type') . ': '));
+        $form->addNested($this->noteTypeSelect($filter, $noteTypes));
+
+        $form->addNested(new HtmlString(' ' . _('About') . ': '));
+        $form->addNested($this->entityTypeSelect($filter));
+
+        $form->addNested(new HtmlString(' '));
+        $form->addNested($this->entityRecordSelect($filter));
+
+        $form->addNested(new HtmlString(' '));
+        $form->addNested($this->checkbox('inactive', $filter->includeInactive(), _('Include inactive')));
+
+        $form->addNested(new HtmlString(' '));
+        $search = new HtmlInput(null, 'submit');
+        $search->setValue(_('Filter'));
+        $search->setAttribute('style', 'padding:6px 12px;');
+        $form->addNested($search);
+
+        $div->addNested($form);
+
+        // Auto-submit form when entity_type changes to refresh entity_id dropdown
+        $js = <<<JS
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var entityTypeSelect = document.querySelector('select[name="entity_type"]');
+    if (entityTypeSelect) {
+        entityTypeSelect.addEventListener('change', function() {
+            this.form.submit();
+        });
+    }
+});
+</script>
+        $div->addNested(new HtmlString($js));
+
+        return $div->getHtml();
+    }
+
+    /**
+     * Owner scope: mine, everyone, or a named user.
+     *
+     * @param NotesFilter $filter Current filter
+     * @param array       $owners Value => label
+     * @return HtmlSelect
+     * @since 1.0.0
+     */
+    private function ownerSelect(NotesFilter $filter, array $owners): HtmlSelect
+    {
+        $choices = array(
+            NotesFilter::OWNER_SELF => _('My notes'),
+            NotesFilter::OWNER_ANY => _('Everyone'),
         );
-        display_notification($removed ? _('Attachment removed') : _('Attachment was not found'));
-        $view = 'form';
-    } elseif ($action === 'create' || $action === 'update') {
-        $owner = notes_page_param('owner', '');
-        $data = array(
-            'subject' => notes_page_param('subject', ''),
-            'note' => notes_page_param('notes_note', ''),
-            'note_type' => notes_page_param('note_type', ''),
-            'inactive' => notes_page_param('inactive_present', '') !== '' ? 1 : 0,
-        );
-        if ($owner !== '') {
-            $data['owner'] = $owner;
+
+        foreach ($owners as $id => $name) {
+            $idStr = (string) $id;
+            $choices[$idStr] = $name;
         }
 
-        if ($action === 'create') {
-            // A new note belongs to whoever wrote it unless they named someone
-            // else; the "my notes" owner filter keys off this value.
-            if ($owner === '') {
-                $data['owner'] = $currentUserId;
-            }
-            // Record the author once, at creation; notes_update() never touches
-            // created_by, so the original author survives later edits.
-            $data['created_by'] = $currentUserId;
-
-            $newId = notes_write($data);
-            if ($newId > 0) {
-                notes_page_apply_links($newId, $options);
-                display_notification(_('Note created'));
-            } else {
-                display_error(_('Could not create the note'));
-            }
-        } else {
-            $updated = notes_update($noteId, $data);
-            if ($updated !== false) {
-                notes_page_apply_links($noteId, $options);
-                display_notification(_('Note updated'));
-            }
+        $selected = $filter->ownerScope();
+        if ($filter->ownerScope() === NotesFilter::OWNER_SPECIFIC) {
+            $selected = $filter->owner();
         }
 
-        $view = 'form';
-    }
-}
+        $select = new HtmlSelect('owner_scope');
 
-//--------------------------------------------------------------------------------
-// Summary table. Opens on the logged-in user's own notes.
+        foreach ($choices as $value => $label) {
+            $select->addOption((string) $value, $label, (string) $value === (string) $selected);
+        }
 
-if ($view === 'summary') {
-    page(_('Notes'));
-
-    $filter = NotesFilter::fromRequest($currentUserId);
-    $notes = notes_get_all($filter->toCriteria());
-
-    foreach ($notes as $key => $note) {
-        $notes[$key]['links'] = notes_link_resolve(
-            notes_link_get_by_note((int) $note['id'])
-        );
+        return $select;
     }
 
-    $owners = notes_page_owner_options($currentUserId);
+    /**
+     * @param NotesFilter $filter   Current filter
+     * @param array       $noteTypes Value => label for the note type dropdown
+     * @return HtmlSelect
+     * @since 1.0.0
+     */
+    private function noteTypeSelect(NotesFilter $filter, array $noteTypes): HtmlSelect
+    {
+        $select = new HtmlSelect('note_type');
+        $select->addOption('', _('-- any --'), $filter->noteType() === '');
 
-    (new NoteSummaryTableView(
-        $options,
-        $notes,
-        $filter,
-        $noteTypes,
-        $currentUserId,
-        $currentUserName,
-        $owners
-    ))->render();
+        // Start with statically-defined types from providers
+        $types = $noteTypes;
 
-    end_page();
-    exit;
-}
-
-//--------------------------------------------------------------------------------
-// Data-entry form.
-
-page(_('Note'));
-
-$noteId = (int) notes_page_param('edit_id', 0);
-$note = $noteId > 0 ? notes_get($noteId) : null;
-
-if ($noteId > 0 && !$note) {
-    display_error(_('That note does not exist'));
-    exit;
-}
-
-$formView = new NoteFormView($options, notes_entity_types(), $noteTypes, 'notes.php?view=form');
-
-echo $formView->currentLinks(
-    $noteId > 0 ? notes_link_resolve(notes_link_get_by_note($noteId)) : array(),
-    $noteId
-);
-
-echo $formView->render($note, $noteId > 0 ? notes_link_get_by_note($noteId) : array());
-
-end_page();
-
-/**
- * Read a scalar request parameter from POST, falling back to GET.
- *
- * @param string $name    Parameter name
- * @param mixed  $default Returned when absent
- * @return string
- */
-function notes_page_param(string $name, $default = '')
-{
-    if (isset($_POST[$name]) && is_scalar($_POST[$name])) {
-        return trim((string) $_POST[$name]);
-    }
-
-    if (isset($_GET[$name]) && is_scalar($_GET[$name])) {
-        return trim((string) $_GET[$name]);
-    }
-
-    return (string) $default;
-}
-
-/**
- * The logged-in user's display name: real_name when set, otherwise the login
- * name. FA exposes these on $_SESSION['wa_current_user']; there is no
- * global user_name() helper in this FA build.
- *
- * @return string
- */
-function notes_current_user_name()
-{
-    $user = $_SESSION['wa_current_user'];
-    $name = trim((string) (@$user->name));
-
-    return $name !== '' ? $name : (string) (@$user->loginname);
-}
-
-/**
- * Save the attachments chosen in the form, adding new ones and dropping the
- * ones the user cleared.
- *
- * @param int                    $noteId Note id
- * @param EntityOptionsProvider  $options Options provider, for the pickable types
- * @return void
- */
-function notes_page_apply_links(int $noteId, EntityOptionsProvider $options)
-{
-    foreach ($options->pickableTypes() as $type) {
-        $field = 'link_' . $type;
-        $chosen = isset($_POST[$field]) && is_array($_POST[$field])
-            ? array_map('strval', $_POST[$field])
-            : array();
-
-        $chosen = array_values(array_filter($chosen, function ($id) {
-            return $id !== '';
-        }));
-
-        $role = notes_page_param('role_' . $type, '') ?: null;
-
-        foreach ($chosen as $entityId) {
-            if (!notes_link_find($noteId, $type, $entityId, $role)) {
-                notes_link_add(array(
-                    'note_id' => $noteId,
-                    'entity_type' => $type,
-                    'entity_id' => $entityId,
-                    'link_role' => $role,
-                ));
+        // Also add all note types actually used in the database, so that types
+        // added by other modules (e.g. Square's 'square_invoice') show up
+        // even if no module has registered them via NOTES_ENTITY_TYPES.
+        $dbTypes = $this->getAllNoteTypesFromDb();
+        foreach ($dbTypes as $type) {
+            if (!isset($types[$type])) {
+                $types[$type] = $type;
             }
         }
 
-        $existing = notes_link_get_by_note($noteId);
-        foreach ($existing as $link) {
-            // Null role, not the form's role: a link may have been saved under a
-            // different role, and the user cleared the record from the list, so
-            // every role for it has to go.
-            if ($link['entity_type'] === $type && !in_array((string) $link['entity_id'], $chosen, true)) {
-                notes_link_delete($noteId, $type, (string) $link['entity_id']);
+        foreach ($types as $value => $label) {
+            $select->addOption((string) $value, $label, (string) $value === $filter->noteType());
+        }
+
+        return $select;
+    }
+
+    /**
+     * Get all distinct note_type values from the 0_ksf_Notes table.
+     * This ensures that types created by other modules (e.g. 'square_invoice'
+     * from ksf_FA_Square) show up in the filter even if no module has
+     * registered them via NOTES_ENTITY_TYPES.
+     *
+     * @return array<string, string> Map of type => type
+     * @since 1.0.0
+     */
+    private function getAllNoteTypesFromDb(): array
+    {
+        $types = array();
+        try {
+            $result = db_query("SELECT DISTINCT note_type FROM " . TB_PREF . "ksf_Notes WHERE note_type <> '' ORDER BY note_type");
+            if ($result) {
+                while ($row = db_fetch_assoc($result)) {
+                    if ($row !== false && !empty($row['note_type'])) {
+                        $rowType = (string) $row['note_type'];
+            $types[$rowType] = $rowType;
+                    }
+                }
+            }
+        } catch (\Exception $e) {
+            // Silently ignore - table might not exist yet
+        }
+        return $types;
+    }
+
+    /**
+     * Which kind of record the note must be attached to.
+     *
+     * @param NotesFilter $filter Current filter
+     * @return HtmlSelect
+     * @since 1.0.0
+     */
+    private function entityTypeSelect(NotesFilter $filter): HtmlSelect
+    {
+        $select = new HtmlSelect('entity_type');
+        $select->addOption('', _('-- any --'), $filter->entityType() === '');
+
+        // pickableTypes(), not all(): the registry's 'picker' flag gates every
+        // dropdown Notes shows. A type with no table behind it would only ever
+        // filter to an empty list.
+        foreach ($this->options->pickableTypes() as $type) {
+            $select->addOption($type, $this->typeLabel($type), $type === $filter->entityType());
+        }
+
+        return $select;
+    }
+
+    /**
+     * Which record, drawn from the options the owning module supplied.
+     *
+     * @param NotesFilter $filter Current filter
+     * @return HtmlSelect
+     * @since 1.0.0
+     */
+    private function entityRecordSelect(NotesFilter $filter): HtmlSelect
+    {
+        $select = new HtmlSelect('entity_id');
+        $select->addOption('', _('-- any --'), $filter->entityId() === '');
+
+        if ($filter->entityType() !== '') {
+            foreach ($this->options->optionsFor($filter->entityType()) as $id => $label) {
+                $select->addOption((string) $id, $label, (string) $id === $filter->entityId());
             }
         }
-    }
-}
 
-/**
- * The owner dropdown: everyone who owns at least one note.
- *
- * @param string $currentUserId Logged-in user id
- * @return array<string, string>
- */
-function notes_page_owner_options(string $currentUserId): array
-{
-    $owners = array();
-
-    if ($currentUserId !== '') {
-        $owners[$currentUserId] = notes_current_user_name();
+        return $select;
     }
 
-    foreach (notes_sql_owners() as $owner) {
-        if ($owner !== '' && !isset($owners[$owner])) {
-            $owners[$owner] = $owner;
+    /**
+     * Human label for an entity type, from the registry when it has one.
+     *
+     * @param string $type Registry key
+     * @return string
+     * @since 1.0.0
+     */
+    private function typeLabel(string $type): string
+    {
+        $labels = $this->options->typeLabels();
+
+        return $labels[$type] ?? (function_exists('_') ? _($type) : $type);
+    }
+
+    /**
+     * @param string $name    Field name
+     * @param string $value   Current value
+     * @param int    $size    Visible width
+     * @return HtmlInput
+     * @since 1.0.0
+     */
+    private function textInput(string $name, string $value, int $size): HtmlInput
+    {
+        $input = new HtmlInput(null, 'text');
+        $input->setName($name);
+        $input->setValue($value);
+        $input->setAttribute('size', (string) $size);
+        $input->setAttribute('placeholder', (string) _('Search notes'));
+
+        return $input;
+    }
+
+    /**
+     * A labelled checkbox, rendered as one HtmlString so it can be nested in
+     * the form alongside the HtmlInput/HtmlSelect elements.
+     *
+     * @param string $name    Field name
+     * @param bool   $checked Current state
+     * @param string $label   Label text
+     * @return HtmlString
+     * @since 1.0.0
+     */
+    private function checkbox(string $name, bool $checked, string $label): HtmlString
+    {
+        $id = 'notes_' . $name;
+
+        $input = new HtmlInput(null, 'checkbox');
+        $input->setName($name);
+        $input->setValue('1');
+        $input->setAttribute('id', $id);
+
+        if ($checked) {
+            $input->setAttribute('checked', 'checked');
         }
-    }
 
-    return $owners;
+        $labelElement = new HtmlLabel($id, $label);
+
+        return new HtmlString($input->getHtml() . ' ' . $labelElement->getHtml());
+    }
 }

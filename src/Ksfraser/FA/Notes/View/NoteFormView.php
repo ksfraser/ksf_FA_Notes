@@ -103,7 +103,7 @@ class NoteFormView
         )));
         $form->addNested(new HtmlString($this->row(
             (string) _('Owner'),
-            $fb->text('owner')->setAttribute('size', '20')->getHtml()
+            $this->ownerSelect($note)
         )));
         $form->addNested(new HtmlString($this->row(
             (string) _('Inactive'),
@@ -421,5 +421,30 @@ class NoteFormView
     private function esc(string $value): string
     {
         return htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
+    }
+
+    /**
+     * Owner dropdown - populated from 0_users table.
+     *
+     * @param array $note Note row
+     * @return string
+     * @since 1.0.0
+     */
+    private function ownerSelect(array $note): string
+    {
+        $selected = (string) ($note['owner'] ?? '');
+        $select = new HtmlSelect('owner');
+        $select->addOption('', _('-- any --'), $selected === '');
+
+        $result = db_query("SELECT `user` FROM " . TB_PREF . "users ORDER BY `user`");
+        if ($result !== false) {
+            while ($row = db_fetch_assoc($result)) {
+                if ($row !== false && isset($row['user']) && $row['user'] !== '') {
+                    $select->addOption((string) $row['user'], (string) $row['user'], (string) $row['user'] === $selected);
+                }
+            }
+        }
+
+        return $select->getHtml();
     }
 }
