@@ -10,7 +10,8 @@
         "ksfraser/html": "dev-fix/constructor-compatibility"
     },
     "require-dev": {
-        "phpunit/phpunit": "^9.6"
+        "phpunit/phpunit": "^9.6",
+        "ksfraser/related-to-core": "^1.0"
     },
     "autoload": {
         "psr-4": {
@@ -25,5 +26,13 @@
             "php": "7.4.33"
         }
     },
-    "repositories": []
+    "repositories": [
+        {
+            "type": "path",
+            "url": "/home/kevin/Documents/ksf_related_to_core",
+            "options": {
+                "symlink": false
+            }
+        }
+    ]
 }
