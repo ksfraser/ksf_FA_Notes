@@ -35,7 +35,7 @@ class NotesResponderTest extends TestCase
         $this->hooks->getModuleCapabilities($data);
 
         $this->assertSame(
-            array('CREATE_NOTE', 'GET_NOTE', 'SEARCH_NOTES', 'GET_NOTES_FOR_ENTITY'),
+            array('CREATE_NOTE', 'GET_NOTE', 'SEARCH_NOTES', 'GET_NOTES_FOR_ENTITY', 'RELATED_MODULES'),
             $data['capabilities']
         );
     }
@@ -44,7 +44,7 @@ class NotesResponderTest extends TestCase
     {
         $data = array();
 
-        foreach (array('CREATE_NOTE', 'GET_NOTE', 'SEARCH_NOTES', 'GET_NOTES_FOR_ENTITY') as $capability) {
+        foreach (array('CREATE_NOTE', 'GET_NOTE', 'SEARCH_NOTES', 'GET_NOTES_FOR_ENTITY', 'RELATED_MODULES') as $capability) {
             $data = array();
             $this->assertTrue(
                 $this->hooks->hasCapability($data, array('capability' => $capability)),
@@ -88,7 +88,7 @@ class NotesResponderTest extends TestCase
     public function testTheResponderListIsDeclaredOnceAndReusedByEveryDiscoveryMethod(): void
     {
         $this->assertSame(
-            array('CREATE_NOTE', 'GET_NOTE', 'SEARCH_NOTES', 'GET_NOTES_FOR_ENTITY'),
+            array('CREATE_NOTE', 'GET_NOTE', 'SEARCH_NOTES', 'GET_NOTES_FOR_ENTITY', 'RELATED_MODULES'),
             \hooks_ksf_FA_Notes::RESPONDERS
         );
 
@@ -135,6 +135,21 @@ class NotesResponderTest extends TestCase
         $data = array();
         $this->assertNull($this->hooks->respondToCapabilityRequest($data, array('request' => 'boogey')));
         $this->assertStringStartsWith('Unknown request type:', $data['error']);
+    }
+
+    public function testRespondToCapabilityRequestAnswersRelatedModules(): void
+    {
+        $data = array();
+        $this->assertTrue($this->hooks->respondToCapabilityRequest($data, array('request' => 'has:RELATED_MODULES')));
+
+        // RELATED_MODULES responder should append Notes to the modules list.
+        $data = array('modules' => array());
+        $this->hooks->RELATED_MODULES($data);
+        $this->assertIsArray($data['modules']);
+        $this->assertCount(1, $data['modules']);
+        $this->assertSame('note', $data['modules'][0]['type']);
+        $this->assertSame('Notes', $data['modules'][0]['label']);
+        $this->assertSame('ksf_FA_Notes', $data['modules'][0]['module']);
     }
 
     // --- CREATE_NOTE ----------------------------------------------------

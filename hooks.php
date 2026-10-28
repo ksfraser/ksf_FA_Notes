@@ -91,7 +91,7 @@ class hooks_ksf_FA_Notes extends hooks {
      * and hasCapability() cannot drift apart, and so _getAdvertisedValues() has
      * something to advertise.
      */
-    const RESPONDERS = array('CREATE_NOTE', 'GET_NOTE', 'SEARCH_NOTES', 'GET_NOTES_FOR_ENTITY');
+    const RESPONDERS = array('CREATE_NOTE', 'GET_NOTE', 'SEARCH_NOTES', 'GET_NOTES_FOR_ENTITY', 'RELATED_MODULES');
 
     var $module_name = 'ksf_FA_Notes';
     var $version = '2.4.3-0';
@@ -419,5 +419,28 @@ class hooks_ksf_FA_Notes extends hooks {
             'notes.workflow_events' => $prefixed,
             'notes.note_types' => array_keys(notes_note_types()),
         );
+    }
+
+    /**
+     * RELATED_MODULES — Notes registers its own related record type.
+     *
+     * $data carries ['modules' => array] by reference; this responder appends
+     * the note type entry.
+     *
+     * @param array $data Modified by reference
+     * @return null
+     * @since 1.0.0
+     */
+    public function RELATED_MODULES(&$data, $opts = null)
+    {
+        if (!isset($data['modules']) || !is_array($data['modules'])) {
+            $data['modules'] = array();
+        }
+        $data['modules'][] = array(
+            'type' => 'note',
+            'label' => _('Notes'),
+            'module' => 'ksf_FA_Notes',
+        );
+        return null;
     }
 }
