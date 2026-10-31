@@ -69,6 +69,39 @@ if (!function_exists('sql2date')) {
     }
 }
 
+/**
+ * Seeded user fixture for tests, mirroring famock's get_users() contract.
+ *
+ * Returns a plain array of user rows keyed like FA's 0_users table
+ * (id, user_id, role_id, inactive). ownerSelect() iterates this directly in
+ * the test bootstrap; inside FA, get_users() is native and returns a query
+ * resource that ownerSelect() reads with db_fetch_assoc().
+ *
+ * @return array
+ */
+if (!function_exists('get_users')) {
+    $GLOBALS['__ksf_notes_users'] = array(
+        array('id' => 1, 'user_id' => 'admin',   'role_id' => 1, 'inactive' => 0),
+        array('id' => 2, 'user_id' => 'kevin',   'role_id' => 2, 'inactive' => 0),
+        array('id' => 3, 'user_id' => 'sue',     'role_id' => 2, 'inactive' => 1),
+    );
+
+    function get_users($all = false)
+    {
+        global $__ksf_notes_users;
+        $users = array();
+
+        foreach ($__ksf_notes_users as $user) {
+            if (!$all && !empty($user['inactive'])) {
+                continue;
+            }
+            $users[] = $user;
+        }
+
+        return $users;
+    }
+}
+
 require_once __DIR__ . '/../includes/entity_types.inc';
 require_once __DIR__ . '/../includes/ksf_notes_db.inc';
 require_once __DIR__ . '/../includes/ksf_notes_link_db.inc';

@@ -198,7 +198,7 @@ try {
 
     page(_('Note'));
 
-    $noteId = (int) notes_page_param('edit_id', 0);
+    $noteId = (int) notes_page_param('edit_id', notes_page_param('note_id', 0));
     $note = $noteId > 0 ? notes_get($noteId) : null;
 
     if ($noteId > 0 && !$note) {
