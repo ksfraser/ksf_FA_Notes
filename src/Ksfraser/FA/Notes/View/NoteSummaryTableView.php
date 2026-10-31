@@ -30,16 +30,12 @@ class NoteSummaryTableView extends AbstractListView
     private $filter;
 
     /** @var array<string, string> */
-    private $noteTypes;
-
-    /** @var array<string, string> */
     private $owners;
 
     /**
      * @param EntityOptionsProvider $options   Dropdown data, from responders
      * @param array[]                $notes     Rows, each with a resolved 'links' key
      * @param NotesFilter            $filter    Current filter
-     * @param array                  $noteTypes Value => label for note categories
      * @param string                 $userId    Logged-in user id
      * @param string                 $userName  Logged-in user's name
      * @param array                  $owners    Value => label for the owner dropdown
@@ -49,7 +45,6 @@ class NoteSummaryTableView extends AbstractListView
         EntityOptionsProvider $options,
         array $notes,
         NotesFilter $filter,
-        array $noteTypes = array(),
         string $userId = '',
         string $userName = '',
         array $owners = array()
@@ -58,7 +53,6 @@ class NoteSummaryTableView extends AbstractListView
 
         $this->notes = $notes;
         $this->filter = $filter;
-        $this->noteTypes = $noteTypes;
         $this->owners = $owners;
     }
 
@@ -68,14 +62,13 @@ class NoteSummaryTableView extends AbstractListView
      */
     public function render(): void
     {
-        echo $this->filterBar->render($this->filter, $this->noteTypes, $this->owners);
+        echo $this->filterBar->render($this->filter, array(), $this->owners);
 
         echo '<p>' . $this->heading() . '</p>';
 
         $this->renderTableStart(array(
             _('Subject'),
-            _('Type'),
-            _('Owner'),
+            _('Assigned To'),
             _('Attached to'),
             _('Created'),
             '',
@@ -131,7 +124,6 @@ class NoteSummaryTableView extends AbstractListView
 
         return array(
             $this->safeStr($subject),
-            $this->safeStr($this->noteTypes[$note['note_type'] ?? ''] ?? ($note['note_type'] ?? '')),
             $this->safeStr($note['owner'] ?? ''),
             $this->attachedTo($note),
             $this->safeStr($this->formatDateTime($note['created_at'] ?? null)),

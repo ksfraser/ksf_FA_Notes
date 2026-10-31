@@ -71,10 +71,9 @@ class NoteFilterBar
         $form->addNested($this->noteTypeSelect($filter, $noteTypes));
 
         $form->addNested(new HtmlString(' ' . _('About') . ': '));
-        $form->addNested($this->entityTypeSelect($filter));
-
+        $form->addNested($this->entityTypeDiv($filter));
         $form->addNested(new HtmlString(' '));
-        $form->addNested($this->entityRecordSelect($filter));
+        $form->addNested($this->entityRecordDiv($filter));
 
         $form->addNested(new HtmlString(' '));
         $form->addNested($this->checkbox('inactive', $filter->includeInactive(), _('Include inactive')));
@@ -87,18 +86,58 @@ class NoteFilterBar
 
         $div->addNested($form);
 
-        // Auto-submit form when entity_type changes to refresh entity_id dropdown
+        // Ajax cascade: choosing an entity type fetches its record options
+        // without submitting the whole filter form. The entity_id <select> is
+        // also rendered server-side when entity_type is present, so the bar
+        // works without JavaScript too.
         $js = <<<JS
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    var entityTypeSelect = document.querySelector('select[name="entity_type"]');
-    if (entityTypeSelect) {
-        entityTypeSelect.addEventListener('change', function() {
-            this.form.submit();
+function notesFetchEntityOptions() {
+    var typeSelect = document.getElementById('notes-entity-type');
+    var idSelect = document.getElementById('notes-entity-id');
+    var wrap = document.getElementById('notes-entity-id-wrap');
+    if (!typeSelect || !idSelect || !wrap) {
+        return;
+    }
+    var type = typeSelect.value;
+    wrap.style.display = type ? 'block' : 'none';
+    if (!type) {
+        idSelect.innerHTML = '<option value="">' + _noneLabel(idSelect) + '</option>';
+        idSelect.disabled = true;
+        return;
+    }
+    var url = 'notes.php?' + 'ajax=entity_options&type=' + encodeURIComponent(type);
+    fetch(url)
+        .then(function(response) { return response.json(); })
+        .then(function(data) {
+            idSelect.disabled = false;
+            idSelect.innerHTML = '<option value="">' + _noneLabel(idSelect) + '</option>';
+            if (Array.isArray(data)) {
+                data.forEach(function(item) {
+                    var option = document.createElement('option');
+                    option.value = item.id;
+                    option.textContent = item.name;
+                    idSelect.appendChild(option);
+                });
+            }
+        })
+        .catch(function() {
+            idSelect.disabled = false;
         });
+}
+
+function _noneLabel(select) {
+    return select.dataset.none || '-- none --';
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    var typeSelect = document.getElementById('notes-entity-type');
+    if (typeSelect) {
+        typeSelect.addEventListener('change', notesFetchEntityOptions);
     }
 });
 </script>
+JS;
         $div->addNested(new HtmlString($js));
 
         return $div->getHtml();
@@ -153,7 +192,7 @@ document.addEventListener('DOMContentLoaded', function() {
         $types = $noteTypes;
 
         // Also add all note types actually used in the database, so that types
-        // added by other modules (e.g. Square's 'square_invoice') show up
+        // added by other modules (e.g. 'square_invoice') show up in the filter
         // even if no module has registered them via NOTES_ENTITY_TYPES.
         $dbTypes = $this->getAllNoteTypesFromDb();
         foreach ($dbTypes as $type) {
@@ -183,11 +222,11 @@ document.addEventListener('DOMContentLoaded', function() {
         $types = array();
         try {
             $result = db_query("SELECT DISTINCT note_type FROM " . TB_PREF . "ksf_Notes WHERE note_type <> '' ORDER BY note_type");
-            if ($result) {
+            if ($result !== false) {
                 while ($row = db_fetch_assoc($result)) {
                     if ($row !== false && !empty($row['note_type'])) {
                         $rowType = (string) $row['note_type'];
-            $types[$rowType] = $rowType;
+                        $types[$rowType] = $rowType;
                     }
                 }
             }
@@ -207,6 +246,7 @@ document.addEventListener('DOMContentLoaded', function() {
     private function entityTypeSelect(NotesFilter $filter): HtmlSelect
     {
         $select = new HtmlSelect('entity_type');
+        $select->setAttribute('id', 'notes-entity-type');
         $select->addOption('', _('-- any --'), $filter->entityType() === '');
 
         // pickableTypes(), not all(): the registry's 'picker' flag gates every
@@ -217,6 +257,48 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         return $select;
+    }
+
+    /**
+     * The entity-type <select> wrapped in its own div so the Ajax cascade can
+     * target it and toggle the subordinate record picker.
+     *
+     * @param NotesFilter $filter Current filter
+     * @return string HTML
+     * @since 1.0.0
+     */
+    private function entityTypeDiv(NotesFilter $filter): HtmlDiv
+    {
+        $div = new HtmlDiv('div');
+        $div->setAttribute('id', 'notes-entity-type-wrap');
+        $div->setAttribute('style', 'display:inline-block;');
+        $div->addNested($this->entityTypeSelect($filter));
+
+        return $div;
+    }
+
+    /**
+     * The record <select> wrapped in its own div. Hidden until an entity type
+     * is chosen; populated either server-side (initial load) or by Ajax (when
+     * the type changes).
+     *
+     * @param NotesFilter $filter Current filter
+     * @return HtmlDiv
+     * @since 1.0.0
+     */
+    private function entityRecordDiv(NotesFilter $filter): HtmlDiv
+    {
+        $div = new HtmlDiv('div');
+        $div->setAttribute('id', 'notes-entity-id-wrap');
+        $div->setAttribute('style', 'display:' . ($filter->entityType() !== '' ? 'inline-block' : 'none') . ';');
+
+        $select = $this->entityRecordSelect($filter);
+        $select->setAttribute('id', 'notes-entity-id');
+        $select->setAttribute('data-none', _('-- none --'));
+
+        $div->addNested($select);
+
+        return $div;
     }
 
     /**

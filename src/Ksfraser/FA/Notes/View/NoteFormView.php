@@ -12,16 +12,19 @@ use Ksfraser\HTML\Elements\HtmlSelect;
 use Ksfraser\HTML\Elements\HtmlString;
 use Ksfraser\HTML\Form\FormBuilder;
 use Ksfraser\FrontAccounting\Notes\Entity\EntityOptionsProvider;
+use ksfraser\FrontAccounting\RelatedTo\UI\RelatedRecordsRenderer;
 
 /**
  * Data-entry form for one note and the records it is attached to.
  *
- * The note fields and the attachment pickers are separate concerns, so they are
- * separate methods: a caller rendering a create form, an edit form, or just the
- * link section uses only what it needs.
+ * Note fields (subject, body, owner, inactive) are edited in the main form.
+ * Record associations are managed through:
+ *   - A Type DDL -> Record DDL (Ajax cascade) + "Associate Record" button
+ *   - A single cross-reference table listing every linked record, each with a
+ *     Remove control (SuiteCRM-style twisty sections grouped by type)
  *
- * Every record dropdown is filled through EntityOptionsProvider, so the options
- * come from whichever module owns those records.
+ * Every record dropdown is filled through EntityOptionsProvider, so the
+ * options come from whichever module owns those records.
  *
  * @BABOK Related: FR-NT-001-004
  * @since 1.0.0
@@ -40,27 +43,52 @@ class NoteFormView
     /** @var string */
     private $formAction;
 
+    /** @var array<string, string> */
+    private $typeLabels;
+
+    /** @var RelatedRecordsRenderer|null */
+    private $renderer;
+
     /**
      * @param EntityOptionsProvider $options    Dropdown data, from responders
      * @param array                  $registry   Entity registry
-     * @param array                  $noteTypes  Value => label for note categories
      * @param string                 $formAction Target script for the POST
+     * @param array                  $noteTypes  Value => label for note categories
+     * @param array                  $typeLabels Module type => label from RELATED_MODULES
      * @since 1.0.0
      */
     public function __construct(
         EntityOptionsProvider $options,
         array $registry = array(),
+        string $formAction = 'notes.php',
         array $noteTypes = array(),
-        string $formAction = 'notes.php'
+        array $typeLabels = array()
     ) {
         $this->options = $options;
         $this->registry = $registry;
         $this->noteTypes = $noteTypes;
         $this->formAction = $formAction;
+        $this->typeLabels = $typeLabels;
+        $this->renderer = null;
     }
 
     /**
-     * The whole form.
+     * Set the related-records renderer (SuiteCRM-style twisty tables).
+     *
+     * @param RelatedRecordsRenderer $renderer
+     * @return $this
+     * @since 1.0.0
+     */
+    public function setRenderer(RelatedRecordsRenderer $renderer)
+    {
+        $this->renderer = $renderer;
+
+        return $this;
+    }
+
+    /**
+     * The whole form: main note fields, association controls, then the
+     * cross-reference table of all linked records.
      *
      * @param array|null $note   Existing note, or null to create
      * @param array      $links  Current link rows when editing
@@ -94,15 +122,11 @@ class NoteFormView
             $fb->text('subject')->setAttribute('size', '60')->setAttribute('maxlength', '100')->getHtml()
         )));
         $form->addNested(new HtmlString($this->row(
-            (string) _('Type'),
-            $this->noteTypeSelect($note)
-        )));
-        $form->addNested(new HtmlString($this->row(
             (string) _('Note'),
             $this->textarea($note)
         )));
         $form->addNested(new HtmlString($this->row(
-            (string) _('Owner'),
+            (string) _('Assigned To'),
             $this->ownerSelect($note)
         )));
         $form->addNested(new HtmlString($this->row(
@@ -111,75 +135,216 @@ class NoteFormView
         )));
         $form->addNested(new HtmlString($this->tableEnd()));
 
-        $form->addNested(new HtmlString($this->linksSection($links, $noteId)));
         $form->addNested(new HtmlString($this->buttons($noteId)));
 
-        return $form->getHtml();
+        // Association controls: Type DDL -> Record DDL + Associate Record button
+        $html = $this->associationControls($noteId);
+
+        // Related records table (SuiteCRM-style twisty sections grouped by type)
+        if ($this->renderer !== null) {
+            $html .= $this->renderer->renderRelatedRecords(
+                'note',
+                $noteId > 0 ? (string) $noteId : '',
+                $this->resolveLinks($links),
+                array(
+                    'css_class' => 'related-records',
+                    'header_class' => 'related-header',
+                    'table_class' => 'related-table',
+                    'type_labels' => !empty($this->typeLabels) ? $this->typeLabels : array(),
+                )
+            );
+        } else {
+            $html .= $this->xrefTableFallback($links, $noteId);
+        }
+
+        return $form->getHtml() . $html;
     }
 
     /**
-     * The attachment pickers only.
+     * Association controls: Type DDL cascading to Record DDL + Associate button.
      *
-     * One multi-select per pickable type, pre-selected with what is already
-     * attached, plus a role selector when a type offers more than one role.
+     * Each control lives in its own small POST form.
      *
-     * @param array $links  Current link rows
-     * @param int   $noteId Note id
+     * @param int $noteId Note id, 0 when creating
      * @return string HTML
      * @since 1.0.0
      */
-    public function linksSection(array $links, int $noteId = 0): string
+    private function associationControls(int $noteId): string
     {
-        $attached = array();
+        $html = '<fieldset style="margin-top:16px;padding:10px;border:1px solid #ccc;">';
+        $html .= '<legend>' . _('Associate with records') . '</legend>';
+
+        $html .= $this->associateForm(
+            $noteId,
+            'associate_record',
+            _('Associate Record'),
+            '<label for="assoc_type">' . _('Type') . ':</label> '
+            . $this->associationTypeSelect() . ' '
+            . $this->associationRecordSelect()
+        );
+
+        $html .= $this->associationCascadeJs();
+        $html .= '</fieldset>';
+
+        return $html;
+    }
+
+    /**
+     * Build one small associate POST form.
+     *
+     * @param int    $noteId Note id
+     * @param string $action Form action value (associate_record)
+     * @param string $button Button label
+     * @param string $fields HTML for the label + select field(s)
+     * @return string HTML
+     * @since 1.0.0
+     */
+    private function associateForm(int $noteId, string $action, string $button, string $fields): string
+    {
+        return '<form method="post" action="' . $this->esc($this->formAction) . '"
+                style="margin:0;padding:0;display:inline-block;">'
+            . '<input type="hidden" name="edit_id" value="' . $noteId . '">'
+            . '<input type="hidden" name="action" value="' . $this->esc($action) . '">'
+            . $fields
+            . ' <button type="submit">' . $this->esc($button) . '</button>'
+            . '</form>';
+    }
+
+    /**
+     * Association type dropdown. Changing this cascades the record dropdown
+     * through Ajax (see associationCascadeJs()).
+     *
+     * @return string HTML
+     * @since 1.0.0
+     */
+    private function associationTypeSelect(): string
+    {
+        $select = new HtmlSelect('assoc_type');
+        $select->setAttribute('id', 'assoc_type');
+        $select->addOption('', _('-- none --'), true);
+
+        $types = !empty($this->typeLabels) ? $this->typeLabels : $this->options->typeLabels();
+
+        foreach ($types as $type => $label) {
+            $select->addOption((string) $type, (string) $label, false);
+        }
+
+        return $select->getHtml();
+    }
+
+    /**
+     * Association record dropdown. Populated by Ajax from the selected type;
+     * empty until a type is chosen.
+     *
+     * @return string HTML
+     * @since 1.0.0
+     */
+    private function associationRecordSelect(): string
+    {
+        $select = new HtmlSelect('assoc_record');
+        $select->setAttribute('id', 'assoc_record');
+        $select->setAttribute('disabled', 'disabled');
+        $select->addOption('', _('-- none --'), true);
+
+        return $select->getHtml();
+    }
+
+    /**
+     * Ajax cascade: choosing an association type fetches its record options
+     * and populates the record dropdown.
+     *
+     * @return string HTML (inline script)
+     * @since 1.0.0
+     */
+    private function associationCascadeJs(): string
+    {
+        $js = <<<JS
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var typeSelect = document.getElementById('assoc_type');
+    var recordSelect = document.getElementById('assoc_record');
+    if (!typeSelect || !recordSelect) {
+        return;
+    }
+    function refreshRecords() {
+        var type = typeSelect.value;
+        recordSelect.disabled = true;
+        recordSelect.innerHTML = '<option value="">-- none --</option>';
+        if (!type) {
+            return;
+        }
+        var url = 'notes.php?ajax=entity_options&type=' + encodeURIComponent(type);
+        fetch(url)
+            .then(function(response) { return response.json(); })
+            .then(function(data) {
+                recordSelect.disabled = false;
+                recordSelect.innerHTML = '<option value="">-- none --</option>';
+                if (Array.isArray(data)) {
+                    data.forEach(function(item) {
+                        var option = document.createElement('option');
+                        option.value = item.id;
+                        option.textContent = item.name;
+                        recordSelect.appendChild(option);
+                    });
+                }
+            })
+            .catch(function() {
+                recordSelect.disabled = false;
+            });
+    }
+    typeSelect.addEventListener('change', refreshRecords);
+});
+</script>
+JS;
+
+        return $js;
+    }
+
+    /**
+     * Resolve legacy link rows into RelatedRecordDto[] for the renderer.
+     *
+     * @param array $links Legacy link rows (entity_type, entity_id, link_role)
+     * @return array RelatedRecordDto[]
+     * @since 1.0.0
+     */
+    private function resolveLinks(array $links): array
+    {
+        $dtos = array();
+
         foreach ($links as $link) {
-            $attached[$link['entity_type']][] = (string) $link['entity_id'];
-        }
-
-        $pickable = $this->options->pickableTypes();
-
-        if (!$pickable) {
-            return '';
-        }
-
-        $html = $this->tableStart();
-        $html .= '<tr><th colspan="2" style="text-align:left;">' . _('Attach to') . '</th></tr>';
-
-        foreach ($pickable as $type) {
-            $items = $this->options->optionsFor($type);
-            $selected = $attached[$type] ?? array();
-
-            $html .= $this->row(
-                (string) $this->typeTitle($type),
-                $this->multiSelect('link_' . $type, $items, $selected)
-            );
-
-            $roles = $this->rolesFor($type);
-            if (count($roles) > 1) {
-                $html .= $this->row(
-                    (string) _('Role'),
-                    $this->roleSelect('role_' . $type, $roles, $roles[array_key_first($roles)] ?? null)
+            if ($link instanceof \ksfraser\RelatedTo\DTO\RelatedRecordDto) {
+                $dtos[] = $link;
+            } elseif (is_array($link)) {
+                $dtos[] = new \ksfraser\RelatedTo\DTO\RelatedRecordDto(
+                    $link['entity_type'] ?? '',
+                    $link['entity_id'] ?? '',
+                    'note',
+                    $link['note_id'] ?? 0,
+                    $link['link_role'] ?? null
                 );
             }
         }
 
-        return $html . $this->tableEnd();
+        return $dtos;
     }
 
     /**
-     * The list of current links, each with a remove control.
+     * Fallback cross-reference table when no renderer is set.
      *
      * @param array $links  Current link rows
      * @param int   $noteId Note id
      * @return string HTML
      * @since 1.0.0
      */
-    public function currentLinks(array $links, int $noteId): string
+    private function xrefTableFallback(array $links, int $noteId): string
     {
         if (!$links) {
             return '<p>' . _('This note is not attached to anything.') . '</p>';
         }
 
-        $html = $this->tableStart();
+        $html = '<fieldset style="margin-top:16px;padding:10px;border:1px solid #ccc;">';
+        $html .= '<legend>' . _('Attached records') . '</legend>';
+        $html .= $this->tableStart();
         $html .= '<tr><th>' . _('Type') . '</th><th>' . _('Record')
             . '</th><th>' . _('Role') . '</th><th></th></tr>';
 
@@ -196,7 +361,10 @@ class NoteFormView
             $html .= '</tr>';
         }
 
-        return $html . $this->tableEnd();
+        $html .= $this->tableEnd();
+        $html .= '</fieldset>';
+
+        return $html;
     }
 
     /**
@@ -261,27 +429,6 @@ class NoteFormView
      * @return string
      * @since 1.0.0
      */
-    private function noteTypeSelect(array $note): string
-    {
-        $selected = (string) ($note['note_type'] ?? '');
-        if ($selected === '' || !isset($this->noteTypes[$selected])) {
-            $selected = (string) (array_key_first($this->noteTypes) ?? 'Comment');
-        }
-
-        $select = new HtmlSelect('note_type');
-
-        foreach ($this->noteTypes as $value => $label) {
-            $select->addOption((string) $value, (string) $label, (string) $value === $selected);
-        }
-
-        return $select->getHtml();
-    }
-
-    /**
-     * @param array $note Note row
-     * @return string
-     * @since 1.0.0
-     */
     private function textarea(array $note): string
     {
         $name = 'notes_note';
@@ -303,84 +450,9 @@ class NoteFormView
     {
         $checked = !empty($note['inactive']);
 
-        return '<input type="hidden" name="inactive_present" value="1">'
-            . '<input type="checkbox" name="inactive" id="notes_inactive" value="1"'
+        return '<input type="checkbox" name="inactive" id="notes_inactive" value="1"'
             . ($checked ? ' checked="checked"' : '')
             . '> <label for="notes_inactive">' . _('Inactive') . '</label>';
-    }
-
-    /**
-     * @param string            $name     Field name
-     * @param array<string,string> $items Options, value => label
-     * @param string[]          $selected Currently selected values
-     * @return string
-     * @since 1.0.0
-     */
-    private function multiSelect(string $name, array $items, array $selected): string
-    {
-        if (!$items) {
-            return '<span>' . _('No records available') . '</span>';
-        }
-
-        $select = new HtmlSelect($name);
-        $select->setAttribute('multiple', 'multiple');
-        $select->setAttribute('size', '5');
-
-        $select->addOption('', (string) _('-- none --'), false);
-
-        foreach ($items as $value => $label) {
-            $select->addOption(
-                (string) $value,
-                (string) $label,
-                in_array((string) $value, array_map('strval', $selected), true)
-            );
-        }
-
-        return $select->getHtml();
-    }
-
-    /**
-     * @param string                $name     Field name
-     * @param array<string,string>  $roles    Role => label
-     * @param string|null           $selected Currently selected role
-     * @return string
-     * @since 1.0.0
-     */
-    private function roleSelect(string $name, array $roles, ?string $selected): string
-    {
-        $select = new HtmlSelect($name);
-
-        foreach ($roles as $value => $label) {
-            $select->addOption((string) $value, (string) $label, (string) $value === (string) $selected);
-        }
-
-        return $select->getHtml();
-    }
-
-    /**
-     * @param string $type Registry key
-     * @return array<string, string>
-     * @since 1.0.0
-     */
-    private function rolesFor(string $type): array
-    {
-        return isset($this->registry['link_roles'][$type]) && is_array($this->registry['link_roles'][$type])
-            ? $this->registry['link_roles'][$type]
-            : array('reference' => (string) _('Reference'));
-    }
-
-    /**
-     * @param string $type Registry key
-     * @return string
-     * @since 1.0.0
-     */
-    private function typeTitle(string $type): string
-    {
-        $titles = $this->options->typeLabels();
-
-        $title = $titles[$type] ?? $type;
-
-        return function_exists('_') ? (string) _($title) : $title;
     }
 
     /**
@@ -424,7 +496,7 @@ class NoteFormView
     }
 
     /**
-     * Owner dropdown - populated from 0_users table.
+     * Owner dropdown - populated from 0_users table via FA native get_users().
      *
      * @param array $note Note row
      * @return string
@@ -436,15 +508,39 @@ class NoteFormView
         $select = new HtmlSelect('owner');
         $select->addOption('', _('-- any --'), $selected === '');
 
-        $result = db_query("SELECT `user` FROM " . TB_PREF . "users ORDER BY `user`");
-        if ($result !== false) {
+        $result = get_users(true);
+
+        if (is_array($result)) {
+            foreach ($result as $row) {
+                $userId = (string) ($row['user_id'] ?? '');
+                if ($userId !== '') {
+                    $select->addOption($userId, $userId, $userId === $selected);
+                }
+            }
+        } elseif ($result !== false) {
             while ($row = db_fetch_assoc($result)) {
-                if ($row !== false && isset($row['user']) && $row['user'] !== '') {
-                    $select->addOption((string) $row['user'], (string) $row['user'], (string) $row['user'] === $selected);
+                if ($row !== false && isset($row['user_id']) && $row['user_id'] !== '') {
+                    $select->addOption((string) $row['user_id'], (string) $row['user_id'], (string) $row['user_id'] === $selected);
                 }
             }
         }
 
         return $select->getHtml();
+    }
+
+    /**
+     * Human label for an entity type.
+     *
+     * @param string $type Registry key
+     * @return string
+     * @since 1.0.0
+     */
+    private function typeTitle(string $type): string
+    {
+        $titles = $this->options->typeLabels();
+
+        $title = $titles[$type] ?? $type;
+
+        return function_exists('_') ? (string) _($title) : $type;
     }
 }

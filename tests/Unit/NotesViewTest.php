@@ -67,7 +67,6 @@ class NotesViewTest extends TestCase
             $this->provider(),
             $notes,
             NotesFilter::fromRequest('kevin'),
-            array('Comment' => 'Comment', 'Call' => 'Call'),
             'kevin',
             'Kevin Smith',
             array('kevin' => 'Kevin Smith', 'sue' => 'Sue Jones')
@@ -146,7 +145,8 @@ class NotesViewTest extends TestCase
         ));
 
         $this->assertStringContainsString('Chase invoice', $html);
-        $this->assertStringContainsString('Overdue 30 days', $html);
+        // The summary table deliberately does not render the note body
+        // (see a96a60e); only subject, type, owner, attachments and created.
         $this->assertStringContainsString('Acme Pty Ltd', $html);
         $this->assertStringContainsString('regarding', $html);
         $this->assertStringContainsString('2026-10-04 09:15:00', $html);
@@ -223,35 +223,42 @@ class NotesViewTest extends TestCase
         $this->assertStringNotContainsString('Jane Smith', $html);
     }
 
-    public function testTheFormOffersAPickerPerPickableType(): void
+    public function testTheFormOffersCustomerContactAndTypeAssociates(): void
     {
-        $html = (new NoteFormView($this->provider(), array(), array('Comment' => 'Comment')))->render();
+        $html = (new NoteFormView($this->provider(), array(), 'notes.php?view=form'))->render();
 
-        $this->assertStringContainsString('name="link_customer"', $html);
-        $this->assertStringContainsString('name="link_contact"', $html);
-        $this->assertStringNotContainsString('name="link_contract"', $html);
+        // Only the Type->Record associate inputs remain (Customer/Contact covered by Type).
+        $this->assertStringContainsString('name="assoc_type"', $html);
+        $this->assertStringContainsString('name="assoc_record"', $html);
+        $this->assertStringContainsString('Associate Record', $html);
+        $this->assertStringNotContainsString('name="customer"', $html);
+        $this->assertStringNotContainsString('name="contact"', $html);
+        $this->assertStringNotContainsString('name="link_customer"', $html);
     }
 
-    public function testTheFormPreSelectsExistingAttachments(): void
+    public function testTheFormListsAttachedRecordsInTheXrefTable(): void
     {
-        $html = (new NoteFormView($this->provider(), array(), array('Comment' => 'Comment')))->render(
-            array('id' => 5),
-            array(
-                array('entity_type' => 'customer', 'entity_id' => 'C001', 'link_role' => 'regarding', 'known' => true, 'label' => 'Acme Pty Ltd'),
-            )
-        );
+        $html = (new NoteFormView($this->provider(), array(), 'notes.php?view=form'))
+            ->render(
+                array('id' => 5),
+                array(
+                    array('entity_type' => 'customer', 'entity_id' => 'C001', 'link_role' => 'regarding', 'known' => true, 'label' => 'Acme Pty Ltd'),
+                )
+            );
 
-        $this->assertStringContainsString('<option value="C001" selected>Acme Pty Ltd</option>', $html);
+        $this->assertStringContainsString('Acme Pty Ltd', $html);
+        $this->assertStringContainsString('Remove', $html);
+        $this->assertStringContainsString('action=unlink', $html);
     }
 
     public function testTheFormKnowsWhetherItIsCreatingOrUpdating(): void
     {
-        $create = (new NoteFormView($this->provider(), array(), array('Comment' => 'Comment')))->render();
+        $create = (new NoteFormView($this->provider(), array(), 'notes.php?view=form'))->render();
         $this->assertStringContainsString('value="create"', $create);
         $this->assertStringContainsString('Create Note', $create);
         $this->assertStringNotContainsString('Delete Note', $create);
 
-        $update = (new NoteFormView($this->provider(), array(), array('Comment' => 'Comment')))
+        $update = (new NoteFormView($this->provider(), array(), 'notes.php?view=form'))
             ->render(array('id' => 5, 'note' => 'x'));
         $this->assertStringContainsString('value="update"', $update);
         $this->assertStringContainsString('Update Note', $update);
@@ -260,7 +267,7 @@ class NotesViewTest extends TestCase
 
     public function testTheFormPopulatesTheNoteFields(): void
     {
-        $html = (new NoteFormView($this->provider(), array(), array('Comment' => 'Comment')))->render(
+        $html = (new NoteFormView($this->provider(), array(), 'notes.php?view=form'))->render(
             array('id' => 5, 'subject' => 'Chase invoice', 'note' => 'Overdue', 'owner' => 'kevin')
         );
 
@@ -269,23 +276,10 @@ class NotesViewTest extends TestCase
         $this->assertStringContainsString('<textarea', $html);
     }
 
-    public function testCurrentLinksAreListedWithARemoveControl(): void
+    public function testTheFormShowsUnattachedWhenNoLinks(): void
     {
-        $html = (new NoteFormView($this->provider()))->currentLinks(
-            array(
-                array('entity_type' => 'customer', 'entity_id' => 'C001', 'link_role' => 'regarding', 'known' => true, 'label' => 'Acme Pty Ltd'),
-            ),
-            5
-        );
-
-        $this->assertStringContainsString('Acme Pty Ltd', $html);
-        $this->assertStringContainsString('Remove', $html);
-        $this->assertStringContainsString('action=unlink', $html);
-    }
-
-    public function testAnEmptyLinkListSaysTheNoteIsUnattached(): void
-    {
-        $html = (new NoteFormView($this->provider()))->currentLinks(array(), 5);
+        $html = (new NoteFormView($this->provider(), array(), 'notes.php?view=form'))
+            ->render(array('id' => 5), array());
 
         $this->assertStringContainsString('not attached to anything', $html);
     }

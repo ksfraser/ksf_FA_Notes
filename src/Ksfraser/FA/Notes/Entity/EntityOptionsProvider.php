@@ -270,11 +270,22 @@ class EntityOptionsProvider
      */
     private function tableExists(string $table): bool
     {
-        if (function_exists('check_table')) {
-            return (bool) check_table($table, TB_PREF);
+        if (!defined('TB_PREF') || !function_exists('db_query')) {
+            return false;
         }
 
-        $result = db_query("SHOW TABLES LIKE '" . TB_PREF . $table . "'");
+        // SHOW TABLES LIKE "0_..." is a MariaDB syntax error when the pattern
+        // starts with a digit. Use WHERE Tables_in_<db> = ... instead.
+        $dbName = isset($GLOBALS['db_connections']) && is_array($GLOBALS['db_connections'])
+            && isset($GLOBALS['db_connections'][0]['dbname'])
+            ? $GLOBALS['db_connections'][0]['dbname']
+            : '';
+
+        if ($dbName !== '') {
+            $result = db_query("SHOW TABLES WHERE Tables_in_" . $dbName . " = '" . TB_PREF . $table . "'");
+        } else {
+            $result = db_query("SHOW TABLES LIKE '" . TB_PREF . $table . "'");
+        }
 
         return $result !== false && db_num_rows($result) > 0;
     }
