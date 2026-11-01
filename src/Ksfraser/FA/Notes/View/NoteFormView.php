@@ -303,7 +303,7 @@ JS;
     /**
      * Resolve legacy link rows into RelatedRecordDto[] for the renderer.
      *
-     * @param array $links Legacy link rows (entity_type, entity_id, link_role)
+     * @param array $links Legacy link rows (entity_type, entity_id, link_role, note_id)
      * @return array RelatedRecordDto[]
      * @since 1.0.0
      */
@@ -316,10 +316,10 @@ JS;
                 $dtos[] = $link;
             } elseif (is_array($link)) {
                 $dtos[] = new \ksfraser\RelatedTo\DTO\RelatedRecordDto(
-                    $link['entity_type'] ?? '',
-                    $link['entity_id'] ?? '',
                     'note',
                     $link['note_id'] ?? 0,
+                    $link['entity_type'] ?? '',
+                    $link['entity_id'] ?? '',
                     $link['link_role'] ?? null
                 );
             }
