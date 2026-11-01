@@ -211,6 +211,7 @@ class RelatedRecordsRenderer implements RelatedRecordsRendererInterface
             'task' => "task_view.php?task_id={$id}",
             'calendar' => "calendar_view.php?id={$id}",
             'attachment' => "admin/attachments.php?vw={$id}",
+            'invoice' => "sales_inquiry.php?trans_no={$id}",
         );
 
         return isset($urls[$type]) ? $urls[$type] : "#";
