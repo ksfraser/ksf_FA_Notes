@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace ksfraser\FrontAccounting\Notes\View;
 
-use ksfraser\FrontAccounting\RelatedTo\UI\RelatedRecordsRendererInterface;
+use ksfraser\RelatedTo\UI\RelatedRecordsRendererInterface;
 use ksfraser\RelatedTo\DTO\RelatedRecordDto;
 
 /**
