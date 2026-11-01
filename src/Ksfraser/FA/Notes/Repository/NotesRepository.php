@@ -198,6 +198,29 @@ final class NotesRepository implements NotesRepositoryInterface
     }
 
     /**
+     * Get distinct note owners as an array.
+     *
+     * @return string[]
+     * @since 1.0.0
+     */
+    public function getOwners(): array
+    {
+        $result = db_query($this->sqlOwners());
+
+        if (!$result) {
+            return array();
+        }
+
+        $owners = array();
+
+        while ($row = db_fetch_assoc($result)) {
+            $owners[] = (string) $row['owner'];
+        }
+
+        return $owners;
+    }
+
+    /**
      * {@inheritdoc}
      */
     public function write(array $data): int

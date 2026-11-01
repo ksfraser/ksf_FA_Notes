@@ -125,7 +125,8 @@ function notes_page_owner_options(string $currentUserId): array
     }
 
     // Add other owners from existing notes
-    $dbOwners = notes_sql_owners();
+    $repo = new \ksfraser\FrontAccounting\Notes\Repository\NotesRepository();
+    $dbOwners = $repo->getOwners();
     foreach ($dbOwners as $owner) {
         if (!isset($options[$owner])) {
             $options[$owner] = $owner;
