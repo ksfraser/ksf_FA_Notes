@@ -27,6 +27,20 @@ use ksfraser\RelatedTo\DTO\RelatedRecordDto;
 final class NotesLinkRepository implements NotesLinkRepositoryInterface
 {
     /**
+     * @var EntityRegistry
+     */
+    private $registry;
+
+    /**
+     * @param EntityRegistry $registry Entity registry for type definitions
+     * @since 1.0.0
+     */
+    public function __construct(EntityRegistry $registry = null)
+    {
+        $this->registry = $registry ?? new EntityRegistry();
+    }
+
+    /**
      * {@inheritdoc}
      */
     public function prepare(array $data): ?array
@@ -41,7 +55,7 @@ final class NotesLinkRepository implements NotesLinkRepositoryInterface
         }
 
         // Validate entity type via registry
-        if (!function_exists('notes_entity_type') || notes_entity_type($data['entity_type']) === null) {
+        if ($this->registry->get($data['entity_type']) === null) {
             return null;
         }
 
@@ -376,11 +390,7 @@ final class NotesLinkRepository implements NotesLinkRepositoryInterface
      */
     private function getEntityDef(string $entity_type): ?array
     {
-        if (!function_exists('notes_entity_type')) {
-            return null;
-        }
-
-        return notes_entity_type($entity_type);
+        return $this->registry->get($entity_type);
     }
 
     /**
@@ -390,7 +400,7 @@ final class NotesLinkRepository implements NotesLinkRepositoryInterface
      */
     private function defaultLinkRoles(): array
     {
-        return array('reference' => 'Reference');
+        return $this->registry->defaultLinkRoles();
     }
 
     /**
@@ -401,10 +411,6 @@ final class NotesLinkRepository implements NotesLinkRepositoryInterface
      */
     private function linkRolesFor(string $entity_type): array
     {
-        if (!function_exists('notes_link_roles_for')) {
-            return array();
-        }
-
-        return notes_link_roles_for($entity_type);
+        return $this->registry->linkRolesFor($entity_type);
     }
 }
