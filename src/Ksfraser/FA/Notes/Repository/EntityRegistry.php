@@ -126,6 +126,15 @@ final class EntityRegistry implements EntityRegistryInterface
                 'picker'   => true,
                 'multiple' => true,
             ),
+            'invoice' => array(
+                'title'    => 'Invoice',
+                'table'    => 'sales_invoice',
+                'pk'       => 'trans_no',
+                'label'    => 'reference',
+                'module'   => '',
+                'picker'   => false,
+                'multiple' => true,
+            ),
         );
 
         if (function_exists('hook_invoke_all')) {
@@ -251,6 +260,11 @@ final class EntityRegistry implements EntityRegistryInterface
             'task' => array('regarding' => 'Regarding'),
             'calendar' => array('regarding' => 'Regarding'),
             'attachment' => array('document' => 'Document'),
+            'invoice' => array(
+                'source_invoice' => 'Source Invoice',
+                'square_invoice' => 'Square Invoice',
+                'reference' => 'Reference',
+            ),
         );
     }
 }
