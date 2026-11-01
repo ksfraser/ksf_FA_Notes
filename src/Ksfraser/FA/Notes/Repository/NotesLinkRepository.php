@@ -170,17 +170,16 @@ final class NotesLinkRepository implements NotesLinkRepositoryInterface
         $links = array();
 
         if (function_exists('hook_invoke')) {
-            $query = new RelatedQueryDto('note', $note_id);
-            $result = $query;
-            hook_invoke('ksf_FA_RelatedTo', 'RELATED_TO', $result, null);
-            if (is_array($result) && isset($result['related']) && is_array($result['related'])) {
-                foreach ($result['related'] as $rel) {
+            // Use symmetric query via RelatedTo repository
+            $repoClass = '\\ksfraser\\FrontAccounting\\RelatedTo\\Repository\\RelatedRecordRepository';
+            if (class_exists($repoClass)) {
+                $repo = new $repoClass();
+                $related = $repo->relatedSymmetric('note', $note_id);
+                foreach ($related as $rel) {
                     if (!$rel instanceof RelatedRecordDto) {
                         continue;
                     }
-                    if ($rel->lhsType !== 'note' || (string) $rel->lhsId !== (string) $note_id) {
-                        continue;
-                    }
+                    // relatedSymmetric normalizes to given record as lhs
                     $links[] = array(
                         'id' => 0,
                         'note_id' => $rel->lhsId,
@@ -193,7 +192,7 @@ final class NotesLinkRepository implements NotesLinkRepositoryInterface
         }
 
         if (empty($links)) {
-            // Fallback: direct table access.
+            // Fallback: direct table access (legacy 0_ksf_Notes_link table).
             $result = db_query(
                 $this->sqlSelect(array('note_id' => $note_id)),
                 'Could not get note links'
@@ -214,14 +213,41 @@ final class NotesLinkRepository implements NotesLinkRepositoryInterface
     {
         $links = array();
 
-        // Direct table access (RelatedTo doesn't expose reverse lookup via hook yet).
-        $result = db_query(
-            $this->sqlSelect(array('entity_type' => $entity_type, 'entity_id' => $entity_id)),
-            'Could not get record notes'
-        );
+        if (function_exists('hook_invoke')) {
+            // Use symmetric query via RelatedTo repository
+            $repoClass = '\\ksfraser\\FrontAccounting\\RelatedTo\\Repository\\RelatedRecordRepository';
+            if (class_exists($repoClass)) {
+                $repo = new $repoClass();
+                $related = $repo->relatedSymmetric($entity_type, $entity_id);
+                foreach ($related as $rel) {
+                    if (!$rel instanceof RelatedRecordDto) {
+                        continue;
+                    }
+                    // relatedSymmetric normalizes to given record as lhs
+                    // We want notes where the entity is on the rhs (as related)
+                    if ($rel->rhsType === 'note') {
+                        $links[] = array(
+                            'id' => 0,
+                            'note_id' => $rel->rhsId,
+                            'entity_type' => $rel->lhsType,
+                            'entity_id' => $rel->lhsId,
+                            'link_role' => $rel->linkRole,
+                        );
+                    }
+                }
+            }
+        }
 
-        while ($row = db_fetch_assoc($result)) {
-            $links[] = $row;
+        if (empty($links)) {
+            // Fallback: direct table access (legacy 0_ksf_Notes_link table).
+            $result = db_query(
+                $this->sqlSelect(array('entity_type' => $entity_type, 'entity_id' => $entity_id)),
+                'Could not get record notes'
+            );
+
+            while ($row = db_fetch_assoc($result)) {
+                $links[] = $row;
+            }
         }
 
         return $links;
