@@ -5,7 +5,7 @@ use ksfraser\FrontAccounting\Notes\DTO\NotesFilter;
 use ksfraser\FrontAccounting\Notes\Entity\EntityOptionsProvider;
 use ksfraser\FrontAccounting\Notes\View\NoteFormView;
 use ksfraser\FrontAccounting\Notes\View\NoteSummaryTableView;
-use ksfraser\FrontAccounting\RelatedTo\UI\RelatedRecordsRenderer;
+use ksfraser\FrontAccounting\Notes\View\RelatedRecordsRenderer;
 
 error_reporting(E_ALL);
 ini_set("display_errors", "1");
@@ -209,7 +209,7 @@ try {
     $formView = new NoteFormView($options, notes_entity_types(), 'notes.php?view=form', array(), $options->typeLabels());
 
     // Wire up the RelatedTo SummaryTableView-style renderer for the related-records table.
-    $renderer = new RelatedRecordsRenderer();
+    $renderer = new RelatedRecordsRenderer($options);
     $formView->setRenderer($renderer);
 
     $links = $noteId > 0
