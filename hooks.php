@@ -2,10 +2,9 @@
 /**
  * KSF FrontAccounting Module Hooks — ksf_FA_Notes
  *
- * Notes is a shared capability: it owns 0_ksf_Notes and 0_ksf_Notes_link and
- * lets CRM, HRM and Project Management hang notes off their own records
- * without knowing anything about each other. Consumers talk to it through the
- * hook responders CREATE_NOTE / GET_NOTE / SEARCH_NOTES / GET_NOTES_FOR_ENTITY.
+* Notes is a shared capability: it owns 0_ksf_Notes and uses 0_ksf_RelatedTo
+* for cross-record associations. Consumers talk to it through the
+* hook responders CREATE_NOTE / GET_NOTE / SEARCH_NOTES / GET_NOTES_FOR_ENTITY.
  *
  * STANDARD PATTERNS:
  *
@@ -67,14 +66,13 @@ if (file_exists($autoload_path)) {
     require_once $autoload_path;
 }
 
-require_once __DIR__ . '/includes/entity_types.inc';
-require_once __DIR__ . '/includes/ksf_notes_db.inc';
-require_once __DIR__ . '/includes/ksf_notes_link_db.inc';
+require_once __DIR__ . '/includes/common.inc';
 require_once __DIR__ . '/includes/events.inc';
 
 use ksfraser\FrontAccounting\Common\Traits\WorkflowHooksTrait;
 use ksfraser\FrontAccounting\Notes\Service\NoteCreationService;
 use ksfraser\FrontAccounting\Notes\Service\NoteQueryService;
+use ksfraser\FrontAccounting\Notes\Repository\EntityRegistry;
 
 class hooks_ksf_FA_Notes extends hooks {
     use Ksfraser\Traits\HookQueryProviderTrait;
@@ -319,7 +317,10 @@ class hooks_ksf_FA_Notes extends hooks {
      */
     public function CREATE_NOTE(&$data, $opts = null)
     {
-        $result = (new NoteCreationService())->create($data, $opts);
+        $result = (new NoteCreationService(
+            new \ksfraser\FrontAccounting\Notes\Repository\NotesRepository(),
+            new \ksfraser\FrontAccounting\Notes\Repository\NotesLinkRepository()
+        ))->create($data, $opts);
 
         if (!$result['ok']) {
             $data['error'] = $result['error'];
@@ -341,7 +342,10 @@ class hooks_ksf_FA_Notes extends hooks {
      */
     public function GET_NOTE(&$data, $opts = null)
     {
-        $result = (new NoteQueryService())->find(notes_opt($opts, $data, 'note_id'));
+        $result = (new NoteQueryService(
+            new \ksfraser\FrontAccounting\Notes\Repository\NotesRepository(),
+            new \ksfraser\FrontAccounting\Notes\Repository\NotesLinkRepository()
+        ))->find(notes_opt($opts, $data, 'note_id'));
 
         if (!$result['ok']) {
             $data['error'] = $result['error'];
@@ -362,7 +366,10 @@ class hooks_ksf_FA_Notes extends hooks {
      */
     public function SEARCH_NOTES(&$data, $opts = null)
     {
-        $result = (new NoteQueryService())->search($data, $opts);
+        $result = (new NoteQueryService(
+            new \ksfraser\FrontAccounting\Notes\Repository\NotesRepository(),
+            new \ksfraser\FrontAccounting\Notes\Repository\NotesLinkRepository()
+        ))->search($data, $opts);
 
         $data['notes'] = $result['notes'];
         $data['count'] = $result['count'];
@@ -381,7 +388,10 @@ class hooks_ksf_FA_Notes extends hooks {
      */
     public function GET_NOTES_FOR_ENTITY(&$data, $opts = null)
     {
-        $result = (new NoteQueryService())->forEntity($data, $opts);
+        $result = (new NoteQueryService(
+            new \ksfraser\FrontAccounting\Notes\Repository\NotesRepository(),
+            new \ksfraser\FrontAccounting\Notes\Repository\NotesLinkRepository()
+        ))->forEntity($data, $opts);
 
         if (!$result['ok']) {
             $data['error'] = $result['error'];
@@ -411,13 +421,15 @@ class hooks_ksf_FA_Notes extends hooks {
             $prefixed[] = 'NOTES_NOTE_' . $event;
         }
 
+        $entityRegistry = new EntityRegistry();
+
         return array(
             'notes.responders' => self::RESPONDERS,
             'notes.entity_types' => array('note', 'note_link'),
             'notes.workflow_prefix' => array('note' => 'NOTES_NOTE'),
             'notes.events' => $events,
             'notes.workflow_events' => $prefixed,
-            'notes.note_types' => array_keys(notes_note_types()),
+            'notes.note_types' => array_keys($entityRegistry->noteTypes()),
         );
     }
 
