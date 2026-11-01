@@ -12,7 +12,7 @@ use Ksfraser\HTML\Elements\HtmlSelect;
 use Ksfraser\HTML\Elements\HtmlString;
 use Ksfraser\HTML\Form\FormBuilder;
 use Ksfraser\FrontAccounting\Notes\Entity\EntityOptionsProvider;
-use ksfraser\FrontAccounting\RelatedTo\UI\RelatedRecordsRenderer;
+use ksfraser\RelatedTo\UI\RelatedRecordsRendererInterface;
 
 /**
  * Data-entry form for one note and the records it is attached to.
@@ -46,7 +46,7 @@ class NoteFormView
     /** @var array<string, string> */
     private $typeLabels;
 
-    /** @var RelatedRecordsRenderer|null */
+    /** @var RelatedRecordsRendererInterface|null */
     private $renderer;
 
     /**
@@ -75,11 +75,11 @@ class NoteFormView
     /**
      * Set the related-records renderer (SuiteCRM-style twisty tables).
      *
-     * @param RelatedRecordsRenderer $renderer
+     * @param RelatedRecordsRendererInterface $renderer
      * @return $this
      * @since 1.0.0
      */
-    public function setRenderer(RelatedRecordsRenderer $renderer)
+    public function setRenderer(RelatedRecordsRendererInterface $renderer)
     {
         $this->renderer = $renderer;
 
