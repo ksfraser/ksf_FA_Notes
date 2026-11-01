@@ -218,3 +218,25 @@ function notes_opt($opts, array $data, $key)
 
     return null;
 }
+
+/**
+ * Read a scalar request parameter from POST, falling back to GET.
+ *
+ * @param string $name    Parameter name
+ * @param mixed  $default Returned when absent
+ * @return string
+ * @since 1.0.0
+ * @BABOK Related: FR-NT-001-005
+ */
+function notes_page_param(string $name, $default = '')
+{
+    if (isset($_POST[$name]) && is_scalar($_POST[$name])) {
+        return trim((string) $_POST[$name]);
+    }
+
+    if (isset($_GET[$name]) && is_scalar($_GET[$name])) {
+        return trim((string) $_GET[$name]);
+    }
+
+    return (string) $default;
+}

@@ -226,38 +226,3 @@ try {
     display_error(_('An error occurred: ') . $e->getMessage());
     exit;
 }
-
-/**
- * Read a scalar request parameter from POST, falling back to GET.
- *
- * @param string $name    Parameter name
- * @param mixed  $default Returned when absent
- * @return string
- */
-function notes_page_param(string $name, $default = '')
-{
-    if (isset($_POST[$name]) && is_scalar($_POST[$name])) {
-        return trim((string) $_POST[$name]);
-    }
-
-    if (isset($_GET[$name]) && is_scalar($_GET[$name])) {
-        return trim((string) $_GET[$name]);
-    }
-
-    return (string) $default;
-}
-
-/**
- * The logged-in user's display name: real_name when set, otherwise the login
- * name. FA exposes these on $_SESSION['wa_current_user']; there is no
- * global user_name() helper in this FA build.
- *
- * @return string
- */
-function notes_current_user_name()
-{
-    $user = $_SESSION['wa_current_user'];
-    $name = trim((string) (@$user->name));
-
-    return $name !== '' ? $name : (string) (@$user->loginname);
-}
