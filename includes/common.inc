@@ -21,6 +21,7 @@
  * @param mixed $value Scalar to escape; arrays and objects are rejected.
  * @return string Escaped literal, quotes included.
  * @since 1.0.0
+ * @BABOK Related: FR-NT-001-001
  */
 function notes_db_escape($value)
 {
@@ -50,6 +51,7 @@ function notes_db_escape($value)
  *
  * @return string 'Y-m-d H:i:s'
  * @since 1.0.0
+ * @BABOK Related: FR-NT-001-001
  */
 function notes_now()
 {
@@ -65,6 +67,7 @@ function notes_now()
  *
  * @return string
  * @since 1.0.0
+ * @BABOK Related: FR-NT-001-001
  */
 function notes_current_user_loginname()
 {
@@ -80,12 +83,66 @@ function notes_current_user_loginname()
 }
 
 /**
+ * The logged-in user's display name: real_name when set, otherwise the login
+ * name. FA exposes these on $_SESSION['wa_current_user']; there is no
+ * global user_name() helper in this FA build.
+ *
+ * @return string
+ * @since 1.0.0
+ * @BABOK Related: FR-NT-001-005
+ */
+function notes_current_user_name()
+{
+    $user = isset($_SESSION['wa_current_user']) ? $_SESSION['wa_current_user'] : null;
+
+    if ($user === null) {
+        return '';
+    }
+
+    $name = trim((string) (@$user->name));
+
+    return $name !== '' ? $name : (string) (@$user->loginname);
+}
+
+/**
+ * Owner dropdown options for the summary table filter.
+ *
+ * Returns user_id => display_name pairs for users who own notes, plus the
+ * current user (so "my notes" filter works even when they own none yet).
+ *
+ * @param string $currentUserId Logged-in user login name
+ * @return array<string, string>
+ * @since 1.0.0
+ * @BABOK Related: FR-NT-001-005
+ */
+function notes_page_owner_options(string $currentUserId): array
+{
+    $options = array();
+
+    // Always include current user so "my notes" filter is available
+    if ($currentUserId !== '') {
+        $options[$currentUserId] = $currentUserId;
+    }
+
+    // Add other owners from existing notes
+    $dbOwners = notes_sql_owners();
+    foreach ($dbOwners as $owner) {
+        if (!isset($options[$owner])) {
+            $options[$owner] = $owner;
+        }
+    }
+
+    return $options;
+}
+
+/**
  * Build the SET clause of an UPDATE from a whitelisted field map.
  *
  * @param array $data Field => value, already filtered to known columns
  * @param array $columns Allowed column names
  * @return string 'SET a = ..., b = ...' or '' when there is nothing to set
  * @since 1.0.0
+ * @BABOK Related: FR-NT-001-001
  */
 function notes_build_set(array $data, array $columns)
 {
@@ -109,6 +166,7 @@ function notes_build_set(array $data, array $columns)
  *
  * @return array<string, string> Value => label
  * @since 1.0.0
+ * @BABOK Related: FR-NT-001-003
  */
 function notes_note_types()
 {
@@ -146,6 +204,7 @@ function notes_note_types()
  * @param string     $key  Key to read
  * @return mixed|null Null when absent in both
  * @since 1.0.0
+ * @BABOK Related: FR-NT-001-001
  */
 function notes_opt($opts, array $data, $key)
 {
@@ -159,4 +218,3 @@ function notes_opt($opts, array $data, $key)
 
     return null;
 }
-
