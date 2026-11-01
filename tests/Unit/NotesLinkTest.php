@@ -203,11 +203,13 @@ class NotesLinkTest extends TestCase
         notes_link_delete(3, 'contact', '7');
 
         $sql = FaDbFake::onlyQuery();
-        $this->assertStringStartsWith('DELETE FROM ' . TB_PREF . 'ksf_Notes_link WHERE ', $sql);
-        $this->assertStringContainsString('`note_id` = 3', $sql);
+        $this->assertStringStartsWith('DELETE FROM `0_ksf_RelatedTo` WHERE ', $sql);
+        $this->assertStringContainsString("`lhs_type` = 'note'", $sql);
+        $this->assertStringContainsString('`lhs_id` = 3', $sql);
+        $this->assertStringContainsString("`rhs_type` = 'contact'", $sql);
+        $this->assertStringContainsString("`rhs_id` = '7'", $sql);
         $this->assertStringNotContainsString('`link_role`', $sql);
     }
-
     public function testDeleteWithRoleIsNarrower(): void
     {
         notes_link_delete(3, 'contact', '7', 'regarding');

@@ -96,7 +96,7 @@ function notes_link_add(array $data)
     }
 
     // Try RelatedTo hook first (preferred path).
-    if (function_exists('hook_invoke_first')) {
+    if (function_exists('hook_invoke')) {
         $dto = new RelatedRecordDto(
             'note',
             $link['note_id'],
@@ -105,7 +105,7 @@ function notes_link_add(array $data)
             $link['link_role']
         );
         $result = $dto;
-        $ret = hook_invoke_first('ksf_FA_RelatedTo', $result, 'RELATE_RECORDS');
+        hook_invoke('ksf_FA_RelatedTo', 'RELATE_RECORDS', $result, null);
         if (is_array($result) && isset($result['ok']) && $result['ok'] === true) {
             return 1;
         }
@@ -143,10 +143,10 @@ function notes_link_add(array $data)
  */
 function notes_link_find($note_id, $entity_type, $entity_id, $link_role = null)
 {
-    if (function_exists('hook_invoke_first')) {
+    if (function_exists('hook_invoke')) {
         $query = new RelatedQueryDto('note', $note_id);
         $result = $query;
-        $ret = hook_invoke_first('ksf_FA_RelatedTo', $result, 'RELATED_TO');
+        hook_invoke('ksf_FA_RelatedTo', 'RELATED_TO', $result, null);
         if (is_array($result) && isset($result['related']) && is_array($result['related'])) {
             foreach ($result['related'] as $rel) {
                 if (!$rel instanceof RelatedRecordDto) {
@@ -200,10 +200,10 @@ function notes_link_get_by_note($note_id)
 {
     $links = array();
 
-    if (function_exists('hook_invoke_first')) {
+    if (function_exists('hook_invoke')) {
         $query = new RelatedQueryDto('note', $note_id);
         $result = $query;
-        $ret = hook_invoke_first('ksf_FA_RelatedTo', $result, 'RELATED_TO');
+        hook_invoke('ksf_FA_RelatedTo', 'RELATED_TO', $result, null);
         if (is_array($result) && isset($result['related']) && is_array($result['related'])) {
             foreach ($result['related'] as $rel) {
                 if (!$rel instanceof RelatedRecordDto) {
