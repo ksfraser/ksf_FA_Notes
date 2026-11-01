@@ -206,7 +206,7 @@ try {
         exit;
     }
 
-    $formView = new NoteFormView($options, notes_entity_types(), 'notes.php?view=form', array(), $moduleTypeLabels);
+    $formView = new NoteFormView($options, notes_entity_types(), 'notes.php?view=form', array(), $options->typeLabels());
 
     // Wire up the RelatedTo SummaryTableView-style renderer for the related-records table.
     $renderer = new RelatedRecordsRenderer();
