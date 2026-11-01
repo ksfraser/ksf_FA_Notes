@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace ksfraser\FrontAccounting\Notes\Service;
 
+use ksfraser\FrontAccounting\Notes\Repository\NotesRepository;
+use ksfraser\FrontAccounting\Notes\Repository\NotesLinkRepository;
+
 /**
  * Note search.
  *
@@ -15,6 +18,29 @@ namespace ksfraser\FrontAccounting\Notes\Service;
  */
 final class NoteQueryService
 {
+    /**
+     * @var NotesRepository
+     */
+    private $notes;
+
+    /**
+     * @var NotesLinkRepository
+     */
+    private $links;
+
+    /**
+     * @param NotesRepository     $notes Notes repository
+     * @param NotesLinkRepository $links Links repository
+     * @since 1.0.0
+     */
+    public function __construct(
+        NotesRepository $notes = null,
+        NotesLinkRepository $links = null
+    ) {
+        $this->notes = $notes ?? new NotesRepository();
+        $this->links = $links ?? new NotesLinkRepository();
+    }
+
     /**
      * Fetch one note with its links resolved to labels.
      *
@@ -30,13 +56,15 @@ final class NoteQueryService
             return array('ok' => false, 'error' => 'note_id_required');
         }
 
-        $note = notes_get($note_id);
+        $note = $this->notes->get((int) $note_id);
 
         if ($note === null) {
             return array('ok' => false, 'error' => 'note_not_found');
         }
 
-        $note['links'] = notes_link_resolve(notes_link_get_by_note($note_id));
+        $note['links'] = $this->links->resolve(
+            $this->links->getByNote((int) $note_id)
+        );
 
         return array('ok' => true, 'note' => $note);
     }
@@ -64,7 +92,7 @@ final class NoteQueryService
             }
         }
 
-        $notes = notes_get_all($criteria);
+        $notes = $this->notes->getAll($criteria);
 
         return array('ok' => true, 'notes' => $notes, 'count' => count($notes));
     }
@@ -89,7 +117,7 @@ final class NoteQueryService
             return array('ok' => false, 'error' => 'entity_required');
         }
 
-        $notes = notes_get_all(array(
+        $notes = $this->notes->getAll(array(
             'entity_type' => $entity_type,
             'entity_id' => $entity_id,
             'limit' => notes_opt($opts, $data, 'limit'),

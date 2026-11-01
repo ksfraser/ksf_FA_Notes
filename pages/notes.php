@@ -6,6 +6,9 @@ use ksfraser\FrontAccounting\Notes\Entity\EntityOptionsProvider;
 use ksfraser\FrontAccounting\Notes\View\NoteFormView;
 use ksfraser\FrontAccounting\Notes\View\NoteSummaryTableView;
 use ksfraser\FrontAccounting\Notes\View\RelatedRecordsRenderer;
+use ksfraser\FrontAccounting\Notes\Repository\NotesRepository;
+use ksfraser\FrontAccounting\Notes\Repository\NotesLinkRepository;
+use ksfraser\FrontAccounting\Notes\Repository\EntityRegistry;
 
 error_reporting(E_ALL);
 ini_set("display_errors", "1");
@@ -15,7 +18,7 @@ ini_set("display_errors", "1");
  *
  * A dispatcher and nothing else: it decides which view to show, enforces the
  * security areas, and hands the view classes plain data. All rendering lives in
- * src/Ksfraser/FA/Notes/View, all SQL in includes/ksf_notes_*.inc.
+ * src/Ksfraser/FA/Notes/View, all SQL in Repository classes.
  *
  * Routes:
  *   (default)                    summary table
@@ -41,15 +44,15 @@ try {
     }
     require_once $autoload;
 
-    require_once __DIR__ . '/../includes/entity_types.inc';
     require_once __DIR__ . '/../includes/common.inc';
-    require_once __DIR__ . '/../includes/ksf_notes_db.inc';
-    require_once __DIR__ . '/../includes/ksf_notes_link_db.inc';
 
     //--------------------------------------------------------------------------------
-    // Wiring, shared by both views.
+    // Wiring - repositories and services (SRP)
 
-    $options = new EntityOptionsProvider(notes_entity_types());
+    $notesRepo = new NotesRepository();
+    $linksRepo = new NotesLinkRepository();
+    $entityRegistry = new EntityRegistry();
+    $options = new EntityOptionsProvider($entityRegistry->all());
     $currentUserId = (string) ($_SESSION['wa_current_user']->loginname ?? '');
     $currentUserName = notes_current_user_name();
 
@@ -84,12 +87,12 @@ try {
         $noteId = (int) notes_page_param('edit_id', notes_page_param('note_id', 0));
 
         if ($action === 'delete') {
-            if ($noteId > 0 && notes_delete($noteId)) {
+            if ($noteId > 0 && $notesRepo->delete($noteId)) {
                 display_notification(_('Note deleted'));
             }
             $view = 'summary';
         } elseif ($action === 'unlink') {
-            $removed = notes_link_delete(
+            $removed = $linksRepo->delete(
                 $noteId,
                 notes_page_param('unlink_type', ''),
                 notes_page_param('unlink_id', ''),
@@ -108,7 +111,7 @@ try {
                 $entityId = notes_page_param('assoc_record', '');
 
                 if ($noteId > 0 && $type !== '' && $entityId !== '') {
-                    notes_link_add(array(
+                    $linksRepo->add(array(
                         'note_id' => $noteId,
                         'entity_type' => $type,
                         'entity_id' => $entityId,
@@ -144,7 +147,7 @@ try {
                 // created_by, so the original author survives later edits.
                 $data['created_by'] = $currentUserId;
 
-                $newId = notes_write($data);
+                $newId = $notesRepo->write($data);
                 if ($newId > 0) {
                     display_notification(_('Note created'));
                     header('Location: notes.php?view=form&edit_id=' . $newId);
@@ -153,7 +156,7 @@ try {
                     display_error(_('Could not create the note'));
                 }
             } else {
-                $updated = notes_update($noteId, $data);
+                $updated = $notesRepo->update($noteId, $data);
                 if ($updated !== false) {
                     display_notification(_('Note updated'));
                 }
@@ -170,11 +173,11 @@ try {
         page(_('Notes'));
 
         $filter = NotesFilter::fromRequest($currentUserId);
-        $notes = notes_get_all($filter->toCriteria());
+        $notes = $notesRepo->getAll($filter->toCriteria());
 
         foreach ($notes as $key => $note) {
-            $notes[$key]['links'] = notes_link_resolve(
-                notes_link_get_by_note((int) $note['id'])
+            $notes[$key]['links'] = $linksRepo->resolve(
+                $linksRepo->getByNote((int) $note['id'])
             );
         }
 
@@ -199,21 +202,21 @@ try {
     page(_('Note'));
 
     $noteId = (int) notes_page_param('edit_id', notes_page_param('note_id', 0));
-    $note = $noteId > 0 ? notes_get($noteId) : null;
+    $note = $noteId > 0 ? $notesRepo->get($noteId) : null;
 
     if ($noteId > 0 && !$note) {
         display_error(_('That note does not exist'));
         exit;
     }
 
-    $formView = new NoteFormView($options, notes_entity_types(), 'notes.php?view=form', array(), $options->typeLabels());
+    $formView = new NoteFormView($options, $entityRegistry->all(), 'notes.php?view=form', array(), $entityRegistry->typeLabels());
 
     // Wire up the RelatedTo SummaryTableView-style renderer for the related-records table.
-    $renderer = new RelatedRecordsRenderer($options);
+    $renderer = new RelatedRecordsRenderer($entityRegistry);
     $formView->setRenderer($renderer);
 
     $links = $noteId > 0
-        ? notes_link_get_by_note($noteId)
+        ? $linksRepo->getByNote($noteId)
         : array();
 
     echo $formView->render($note, $links);

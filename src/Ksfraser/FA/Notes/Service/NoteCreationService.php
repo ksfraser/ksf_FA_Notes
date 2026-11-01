@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace ksfraser\FrontAccounting\Notes\Service;
 
+use ksfraser\FrontAccounting\Notes\Repository\NotesRepository;
+use ksfraser\FrontAccounting\Notes\Repository\NotesLinkRepository;
+
 /**
  * Note creation.
  *
@@ -16,6 +19,29 @@ namespace ksfraser\FrontAccounting\Notes\Service;
 final class NoteCreationService
 {
     /**
+     * @var NotesRepository
+     */
+    private $notes;
+
+    /**
+     * @var NotesLinkRepository
+     */
+    private $links;
+
+    /**
+     * @param NotesRepository     $notes Notes repository
+     * @param NotesLinkRepository $links Links repository
+     * @since 1.0.0
+     */
+    public function __construct(
+        NotesRepository $notes = null,
+        NotesLinkRepository $links = null
+    ) {
+        $this->notes = $notes ?? new NotesRepository();
+        $this->links = $links ?? new NotesLinkRepository();
+    }
+
+    /**
      * Create one note and attach the requested records.
      *
      * @param array      $data Payload; note/subject/note_type/owner/...
@@ -27,7 +53,7 @@ final class NoteCreationService
      */
     public function create(array $data, $opts = null): array
     {
-        $note_id = notes_write($this->payload($data, $opts));
+        $note_id = $this->notes->write($this->payload($data, $opts));
 
         if ($note_id <= 0) {
             return array('ok' => false, 'error' => 'note_body_required');
@@ -38,7 +64,7 @@ final class NoteCreationService
         foreach ($this->links($opts) as $link) {
             $link['note_id'] = $note_id;
 
-            if (notes_link_add($link) > 0) {
+            if ($this->links->add($link) > 0) {
                 $added++;
             }
         }

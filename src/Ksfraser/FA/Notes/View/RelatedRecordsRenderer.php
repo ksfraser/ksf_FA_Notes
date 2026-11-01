@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace ksfraser\FrontAccounting\Notes\View;
 
+use ksfraser\FrontAccounting\Notes\Repository\EntityRegistry;
 use ksfraser\RelatedTo\UI\RelatedRecordsRendererInterface;
 use ksfraser\RelatedTo\DTO\RelatedRecordDto;
 
@@ -19,17 +20,17 @@ use ksfraser\RelatedTo\DTO\RelatedRecordDto;
 class RelatedRecordsRenderer implements RelatedRecordsRendererInterface
 {
     /**
-     * @var EntityOptionsProvider
+     * @var EntityRegistry
      */
-    private $options;
+    private $registry;
 
     /**
-     * @param EntityOptionsProvider $options Entity registry provider for label resolution
+     * @param EntityRegistry $registry Entity registry for label resolution
      * @since 1.0.0
      */
-    public function __construct($options = null)
+    public function __construct(EntityRegistry $registry = null)
     {
-        $this->options = $options;
+        $this->registry = $registry ?? new EntityRegistry();
     }
 
     /**
@@ -162,11 +163,7 @@ class RelatedRecordsRenderer implements RelatedRecordsRendererInterface
      */
     private function recordLabel($type, $id)
     {
-        if ($this->options === null) {
-            return (string) $id;
-        }
-
-        $def = $this->options->entityType($type);
+        $def = $this->registry->get($type);
 
         if ($def === null) {
             return (string) $id;
