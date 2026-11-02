@@ -4,137 +4,36 @@ declare(strict_types=1);
 
 namespace ksfraser\FrontAccounting\Notes\Repository;
 
+use ksfraser\FrontAccounting\Common\Repository\EntityRegistry as CommonEntityRegistry;
 use ksfraser\FrontAccounting\Notes\Contract\EntityRegistryInterface;
 
 /**
- * Entity registry - source of truth for entity type definitions.
+ * Notes-specific entity registry extending the common one.
  *
- * Owns the NOTES_ENTITY_TYPES hook and provides registry access to consumers.
- * Replaces standalone functions in includes/entity_types.inc.
+ * Adds Notes-specific entity types (invoice), note types, and link roles.
  *
  * @BABOK Related: FR-NT-001-002
  * @since 1.0.0
  */
-final class EntityRegistry implements EntityRegistryInterface
+final class EntityRegistry extends CommonEntityRegistry implements EntityRegistryInterface
 {
     /**
-     * @var array<string, array>
+     * {@inheritdoc}
      */
-    private $registry;
-
-    /**
-     * @param array<string, array>|null $registry Pre-built registry (for testing).
-     *        When null, builds from static definitions + NOTES_ENTITY_TYPES hook.
-     * @since 1.0.0
-     */
-    public function __construct(?array $registry = null)
+    protected function buildRegistry(): array
     {
-        if ($registry !== null) {
-            $this->registry = $registry;
-        } else {
-            $this->registry = $this->buildRegistry();
-        }
-    }
+        // Get base registry from parent (Common)
+        $types = parent::buildRegistry();
 
-    /**
-     * Build the entity type registry, honouring the NOTES_ENTITY_TYPES hook.
-     *
-     * @return array<string, array>
-     * @since 1.0.0
-     */
-    private function buildRegistry(): array
-    {
-        $types = array(
-            'customer' => array(
-                'title'    => 'Customer',
-                'table'    => 'debtors_master',
-                'pk'       => 'debtor_no',
-                'label'    => 'name',
-                'module'   => '',
-                'picker'   => true,
-                'multiple' => true,
-            ),
-            'contact' => array(
-                'title'    => 'Contact',
-                'table'    => 'crm_persons',
-                'pk'       => 'id',
-                'label'    => 'name',
-                'module'   => '',
-                'picker'   => true,
-                'multiple' => true,
-            ),
-            'meeting' => array(
-                'title'    => 'Meeting',
-                'table'    => 'ksf_crm_meetings',
-                'pk'       => 'id',
-                'label'    => 'meeting_name',
-                'module'   => 'ksf_FA_CRM',
-                'picker'   => true,
-                'multiple' => true,
-            ),
-            'opportunity' => array(
-                'title'    => 'Opportunity',
-                'table'    => 'ksf_crm_opportunities',
-                'pk'       => 'id',
-                'label'    => 'opportunity_name',
-                'module'   => 'ksf_FA_CRM',
-                'picker'   => true,
-                'multiple' => true,
-            ),
-            'contract' => array(
-                'title'    => 'Contract',
-                'table'    => 'ksf_contract',
-                'pk'       => 'id',
-                'label'    => 'name',
-                'module'   => 'ksf_FA_Contract',
-                'picker'   => false,
-                'multiple' => true,
-            ),
-            'project' => array(
-                'title'    => 'Project',
-                'table'    => 'ksf_projectmanagement_projects',
-                'pk'       => 'project_id',
-                'label'    => 'name',
-                'module'   => 'ksf_FA_ProjectManagement',
-                'picker'   => true,
-                'multiple' => true,
-            ),
-            'task' => array(
-                'title'    => 'Task',
-                'table'    => 'ksf_projectmanagement_tasks',
-                'pk'       => 'task_id',
-                'label'    => 'name',
-                'module'   => 'ksf_FA_ProjectManagement',
-                'picker'   => true,
-                'multiple' => true,
-            ),
-            'calendar' => array(
-                'title'    => 'Calendar Entry',
-                'table'    => 'ksf_calendar_entries',
-                'pk'       => 'id',
-                'label'    => 'title',
-                'module'   => 'ksf_FA_Calendar',
-                'picker'   => true,
-                'multiple' => true,
-            ),
-            'attachment' => array(
-                'title'    => 'Attachment',
-                'table'    => 'attachments',
-                'pk'       => 'id',
-                'label'    => 'description',
-                'module'   => '',
-                'picker'   => true,
-                'multiple' => true,
-            ),
-            'invoice' => array(
-                'title'    => 'Invoice',
-                'table'    => 'sales_invoice',
-                'pk'       => 'trans_no',
-                'label'    => 'reference',
-                'module'   => '',
-                'picker'   => false,
-                'multiple' => true,
-            ),
+        // Add Notes-specific types
+        $types['invoice'] = array(
+            'title'    => 'Invoice',
+            'table'    => 'sales_invoice',
+            'pk'       => 'trans_no',
+            'label'    => 'reference',
+            'module'   => '',
+            'picker'   => false,
+            'multiple' => true,
         );
 
         if (function_exists('hook_invoke_all')) {
@@ -146,64 +45,6 @@ final class EntityRegistry implements EntityRegistryInterface
         }
 
         return $types;
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function all(): array
-    {
-        return $this->registry;
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function get(string $entity_type): ?array
-    {
-        return $this->registry[$entity_type] ?? null;
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function pickable(): array
-    {
-        return array_filter($this->registry, function ($def) {
-            return !empty($def['picker']);
-        });
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function typeLabels(): array
-    {
-        $labels = array();
-
-        foreach ($this->registry as $entity_type => $def) {
-            $labels[$entity_type] = (string) ($def['title'] ?? $def['label'] ?? $entity_type);
-        }
-
-        return $labels;
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function linkRolesFor(string $entity_type): array
-    {
-        $roles = $this->linkRoles();
-
-        return isset($roles[$entity_type]) ? $roles[$entity_type] : array();
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function defaultLinkRoles(): array
-    {
-        return array('reference' => 'Reference');
     }
 
     /**
@@ -234,37 +75,20 @@ final class EntityRegistry implements EntityRegistryInterface
     }
 
     /**
-     * Link roles per entity type.
-     *
-     * @return array<string, array<string, string>>
-     * @since 1.0.0
+     * {@inheritdoc}
      */
-    private function linkRoles(): array
+    protected function linkRoles(): array
     {
-        return array(
-            'customer' => array(
-                'regarding' => 'Regarding',
-                'with' => 'With',
-            ),
-            'contact' => array(
-                'with' => 'With',
-                'regarding' => 'Regarding',
-            ),
-            'meeting' => array(
-                'regarding' => 'Regarding',
-                'with' => 'Attended With',
-            ),
-            'opportunity' => array('regarding' => 'Regarding'),
-            'contract' => array('regarding' => 'Regarding'),
-            'project' => array('regarding' => 'Regarding'),
-            'task' => array('regarding' => 'Regarding'),
-            'calendar' => array('regarding' => 'Regarding'),
-            'attachment' => array('document' => 'Document'),
-            'invoice' => array(
-                'source_invoice' => 'Source Invoice',
-                'square_invoice' => 'Square Invoice',
-                'reference' => 'Reference',
-            ),
+        // Get base roles from parent
+        $roles = parent::linkRoles();
+
+        // Add Notes-specific roles
+        $roles['invoice'] = array(
+            'source_invoice' => 'Source Invoice',
+            'square_invoice' => 'Square Invoice',
+            'reference' => 'Reference',
         );
+
+        return $roles;
     }
 }

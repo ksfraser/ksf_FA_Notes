@@ -26,5 +26,14 @@
         "platform": {
             "php": "7.4.33"
         }
+    },
+    "repositories": {
+        "ksf-fa-common": {
+            "type": "path",
+            "url": "/home/kevin/Documents/ksf_FA_Common",
+            "options": {
+                "symlink": true
+            }
+        }
     }
 }

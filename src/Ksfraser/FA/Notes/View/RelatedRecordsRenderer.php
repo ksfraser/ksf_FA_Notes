@@ -203,15 +203,15 @@ class RelatedRecordsRenderer implements RelatedRecordsRendererInterface
     private function recordUrl($type, $id)
     {
         $urls = array(
-            'customer' => "customer_inquiries.php?customer_id={$id}",
-            'contact' => "crm_contacts.php?contact_id={$id}",
-            'meeting' => "meeting_view.php?id={$id}",
-            'opportunity' => "opportunity_view.php?id={$id}",
-            'project' => "project_view.php?project_id={$id}",
-            'task' => "task_view.php?task_id={$id}",
-            'calendar' => "calendar_view.php?id={$id}",
+            'customer' => "sales/customer_inquiries.php?customer_id={$id}",
+            'contact' => "crm/crm_contacts.php?contact_id={$id}",
+            'meeting' => "crm/meeting_view.php?id={$id}",
+            'opportunity' => "crm/opportunity_view.php?id={$id}",
+            'project' => "project/project_view.php?project_id={$id}",
+            'task' => "project/task_view.php?task_id={$id}",
+            'calendar' => "calendar/cal.php?id={$id}",
             'attachment' => "admin/attachments.php?vw={$id}",
-            'invoice' => "sales_inquiry.php?trans_no={$id}",
+            'invoice' => "sales/sales_inquiry.php?trans_no={$id}",
         );
 
         return isset($urls[$type]) ? $urls[$type] : "#";
