@@ -36,6 +36,16 @@ final class EntityRegistry extends CommonEntityRegistry implements EntityRegistr
             'multiple' => true,
         );
 
+        $types['contact'] = array(
+            'title'    => 'Contact',
+            'table'    => 'crm_persons',
+            'pk'       => 'id',
+            'label'    => 'name',
+            'module'   => '',
+            'picker'   => true,
+            'multiple' => true,
+        );
+
         if (function_exists('hook_invoke_all')) {
             $data = array('types' => $types);
             hook_invoke_all('NOTES_ENTITY_TYPES', $data);
@@ -86,6 +96,11 @@ final class EntityRegistry extends CommonEntityRegistry implements EntityRegistr
         $roles['invoice'] = array(
             'source_invoice' => 'Source Invoice',
             'square_invoice' => 'Square Invoice',
+            'reference' => 'Reference',
+        );
+
+        $roles['contact'] = array(
+            'invoice_contact' => 'Invoice Contact',
             'reference' => 'Reference',
         );
 
