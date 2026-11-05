@@ -150,6 +150,7 @@ class NoteFormView
                     'css_class' => 'related-records',
                     'header_class' => 'related-header',
                     'table_class' => 'related-table',
+                    'table_border' => true,
                     'type_labels' => !empty($this->typeLabels) ? $this->typeLabels : array(),
                 )
             );

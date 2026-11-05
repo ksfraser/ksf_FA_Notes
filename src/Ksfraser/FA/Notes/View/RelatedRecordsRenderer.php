@@ -46,6 +46,7 @@ class RelatedRecordsRenderer implements RelatedRecordsRendererInterface
         $cssClass = isset($options['css_class']) ? (string) $options['css_class'] : 'related-records';
         $headerClass = isset($options['header_class']) ? (string) $options['header_class'] : 'related-header';
         $tableClass = isset($options['table_class']) ? (string) $options['table_class'] : 'related-table';
+        $tableBordered = !empty($options['table_border']);
 
         // Group related records by rhs type
         $groups = array();
@@ -75,14 +76,18 @@ class RelatedRecordsRenderer implements RelatedRecordsRendererInterface
             $toggleId = 'rel-toggle-' . $this->esc($type) . '-' . $this->esc((string) $lhsId);
 
             $html .= '<div class="' . $this->esc($headerClass) . '">';
-            $html .= '<a href="#" onclick="return toggleRelated(\'' . $this->escJs($toggleId) . '\');">';
-            $html .= '<span class="rel-arrow">▼</span> ' . $this->esc($label);
+            $html .= '<h2 class="related-title" onclick="return toggleRelated(\'' . $this->escJs($toggleId) . '\');">';
+            $html .= '<span class="rel-arrow expanded"></span> ' . $this->esc($label);
             $html .= ' <span class="rel-count">(' . $count . ')</span>';
-            $html .= '</a>';
+            $html .= '</h2>';
             $html .= '</div>';
 
             $html .= '<div id="' . $this->esc($toggleId) . '" class="rel-content" style="display:block;">';
-            $html .= '<table class="' . $this->esc($tableClass) . '">';
+            $tableClasses = $tableClass;
+            if ($tableBordered) {
+                $tableClasses .= ' related-table-bordered';
+            }
+            $html .= '<table class="' . $this->esc($tableClasses) . '">';
             $html .= '<thead><tr>';
             $html .= '<th>' . _('Record') . '</th>';
             $html .= '<th>' . _('Role') . '</th>';
@@ -114,13 +119,21 @@ class RelatedRecordsRenderer implements RelatedRecordsRendererInterface
 
         $html .= '</div>';
 
+        $html .= '<style>'
+            . '.related-title { font-size: 1.15em; font-weight: bold; margin: 0 0 0.5em 0; cursor: pointer; }'
+            . '.related-title .rel-arrow { display: inline-block; width: 0; height: 0; margin-right: 6px; vertical-align: middle; }'
+            . '.related-title .rel-arrow.expanded { border-top: 6px solid #555; border-left: 4px solid transparent; border-right: 4px solid transparent; border-bottom: none; }'
+            . '.related-title .rel-arrow.collapsed { border-left: 6px solid #555; border-top: 4px solid transparent; border-bottom: 4px solid transparent; border-right: none; }'
+            . 'table.related-table-bordered, table.related-table-bordered th, table.related-table-bordered td { border: 1px solid #999; border-collapse: collapse; }'
+            . 'table.related-table-bordered { border: 1px solid #999; }'
+            . '</style>';
         $html .= '<script>'
             . 'function toggleRelated(id) {'
             . ' var el = document.getElementById(id);'
             . ' if (!el) return false;'
             . ' var arrow = el.previousElementSibling.querySelector(".rel-arrow");'
-            . ' if (el.style.display === "none") { el.style.display = "block"; if (arrow) arrow.textContent = "▼"; }'
-            . ' else { el.style.display = "none"; if (arrow) arrow.textContent = "▶"; }'
+            . ' if (el.style.display === "none") { el.style.display = "block"; if (arrow) arrow.className = "rel-arrow expanded"; }'
+            . ' else { el.style.display = "none"; if (arrow) arrow.className = "rel-arrow collapsed"; }'
             . ' return false;'
             . '}'
             . '</script>';
