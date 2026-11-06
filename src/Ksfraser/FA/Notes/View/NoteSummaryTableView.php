@@ -78,7 +78,7 @@ class NoteSummaryTableView extends AbstractListView
             _('Attached to'),
             _('Created'),
             '',
-        ));
+        ), 'border-collapse:collapse;');
 
         foreach ($this->notes as $note) {
             $this->renderRow($this->cellsFor($note));
