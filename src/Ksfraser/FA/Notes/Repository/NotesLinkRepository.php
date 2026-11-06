@@ -132,7 +132,7 @@ final class NotesLinkRepository implements NotesLinkRepositoryInterface
             'Could not link note to record'
         );
 
-        return (int) db_insert_id();
+        return 1; // One link added
     }
 
     /**

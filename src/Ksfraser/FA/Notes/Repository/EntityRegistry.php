@@ -176,6 +176,11 @@ final class EntityRegistry extends CommonEntityRegistry implements EntityRegistr
             'reference' => 'Reference',
         );
 
+        $roles['contract'] = array(
+            'source_contract' => 'Source Contract',
+            'reference' => 'Reference',
+        );
+
         $roles['attachment'] = array(
             'source_attachment' => 'Source Attachment',
             'document' => 'Document',
@@ -204,11 +209,6 @@ final class EntityRegistry extends CommonEntityRegistry implements EntityRegistr
 
         $roles['calendar'] = array(
             'source_calendar' => 'Source Calendar Entry',
-            'reference' => 'Reference',
-        );
-
-        $roles['attachment'] = array(
-            'source_attachment' => 'Source Attachment',
             'reference' => 'Reference',
         );
 
