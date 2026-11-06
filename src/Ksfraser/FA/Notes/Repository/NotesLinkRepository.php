@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace ksfraser\FrontAccounting\Notes\Repository;
 
+use ksfraser\FrontAccounting\Common\ContactResolver\ContactResolver;
+use ksfraser\FrontAccounting\Common\ContactResolver\ContactResolverInterface;
 use ksfraser\FrontAccounting\Notes\Contract\NotesLinkRepositoryInterface;
 use ksfraser\RelatedTo\DTO\RelatedQueryDto;
 use ksfraser\RelatedTo\DTO\RelatedRecordDto;
@@ -32,12 +34,19 @@ final class NotesLinkRepository implements NotesLinkRepositoryInterface
     private $registry;
 
     /**
+     * @var ContactResolverInterface Resolves contact labels by contact id
+     */
+    private $contactResolver;
+
+    /**
      * @param EntityRegistry $registry Entity registry for type definitions
+     * @param ContactResolverInterface|null $contactResolver Contact resolver
      * @since 1.0.0
      */
-    public function __construct(EntityRegistry $registry = null)
+    public function __construct(EntityRegistry $registry = null, ContactResolverInterface $contactResolver = null)
     {
         $this->registry = $registry ?? new EntityRegistry();
+        $this->contactResolver = $contactResolver ?? new \ksfraser\FrontAccounting\Common\ContactResolver\ContactResolver();
     }
 
     /**
@@ -322,15 +331,30 @@ final class NotesLinkRepository implements NotesLinkRepositoryInterface
             $def = $this->getEntityDef($resolvedLink['entity_type']);
 
             if ($def !== null) {
-                $sql = 'SELECT `' . $def['label'] . '` AS label FROM ' . TB_PREF . $def['table']
-                    . ' WHERE `' . $def['pk'] . '` = ' . notes_db_escape($resolvedLink['entity_id']);
-
-                $result = db_query($sql);
-                if ($result !== false && db_num_rows($result) > 0) {
-                    $row = db_fetch_assoc($result);
-                    if ($row !== false) {
-                        $resolvedLink['label'] = $row['label'];
+                // Contact type uses ContactResolver::findContactById() because
+                // entity_id is crm_contacts.id (relation id), not crm_persons.id
+                // Using crm_persons.id directly would fail for most contacts
+                if ($resolvedLink['entity_type'] === 'contact' && $this->contactResolver !== null) {
+                    $contact = $this->contactResolver->findContactById((int) $resolvedLink['entity_id']);
+                    if ($contact !== null && $contact->getDisplayName() !== '') {
+                        $resolvedLink['label'] = $contact->getDisplayName();
                         $resolvedLink['known'] = true;
+                    }
+                } else {
+                    $sql = 'SELECT `' . $def['label'] . '` AS label FROM ' . TB_PREF . $def['table']
+                        . ' WHERE `' . $def['pk'] . '` = ' . notes_db_escape($resolvedLink['entity_id']);
+
+                    if (!empty($def['where'])) {
+                        $sql .= ' AND ' . $def['where'];
+                    }
+
+                    $result = db_query($sql);
+                    if ($result !== false && db_num_rows($result) > 0) {
+                        $row = db_fetch_assoc($result);
+                        if ($row !== false) {
+                            $resolvedLink['label'] = $row['label'];
+                            $resolvedLink['known'] = true;
+                        }
                     }
                 }
             }
