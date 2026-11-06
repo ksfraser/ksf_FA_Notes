@@ -28,12 +28,13 @@ final class EntityRegistry extends CommonEntityRegistry implements EntityRegistr
         // Add Notes-specific types
         $types['invoice'] = array(
             'title'    => 'Invoice',
-            'table'    => 'sales_invoice',
+            'table'    => 'debtor_trans',
             'pk'       => 'trans_no',
             'label'    => 'reference',
             'module'   => '',
             'picker'   => false,
             'multiple' => true,
+            'where'    => "type = " . (defined('ST_SALESINVOICE') ? ST_SALESINVOICE : 10),
         );
 
         $types['contact'] = array(
