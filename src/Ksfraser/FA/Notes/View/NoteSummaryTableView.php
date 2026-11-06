@@ -66,6 +66,12 @@ class NoteSummaryTableView extends AbstractListView
 
         echo '<p>' . $this->heading() . '</p>';
 
+        echo '<p class="add-note-button">'
+            . '<a href="' . $this->url('notes.php', array('view' => 'form'))
+            . '" class="button" style="display:inline-block;margin-bottom:10px;">'
+            . _('Add Note') . '</a>'
+            . '</p>';
+
         $this->renderTableStart(array(
             _('Subject'),
             _('Assigned To'),
