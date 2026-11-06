@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace ksfraser\FrontAccounting\Notes\View;
 
 use ksfraser\FrontAccounting\Common\ContactResolver\ContactResolver;
+use ksfraser\FrontAccounting\Common\Repository\EntityUrlResolver;
 use ksfraser\FrontAccounting\Notes\Repository\EntityRegistry;
 use ksfraser\RelatedTo\UI\RelatedRecordsRendererInterface;
 use ksfraser\RelatedTo\DTO\RelatedRecordDto;
@@ -34,15 +35,23 @@ class RelatedRecordsRenderer implements RelatedRecordsRendererInterface
     private $contactResolver;
 
     /**
+     * @var EntityUrlResolver Resolves entity record URLs
+     */
+    private $urlResolver;
+
+    /**
      * @param EntityRegistry $registry Entity registry for label resolution
      * @param ContactResolver|null $contactResolver Contact resolver (defaults
      *        to a new ContactResolver backed by FaContactResolver)
+     * @param EntityUrlResolver|null $urlResolver URL resolver (defaults to a
+     *        new EntityUrlResolver with canonical FA URL patterns)
      * @since 1.0.0
      */
-    public function __construct(EntityRegistry $registry = null, ContactResolver $contactResolver = null)
+    public function __construct(EntityRegistry $registry = null, ContactResolver $contactResolver = null, EntityUrlResolver $urlResolver = null)
     {
         $this->registry = $registry ?? new EntityRegistry();
         $this->contactResolver = $contactResolver ?? new ContactResolver();
+        $this->urlResolver = $urlResolver ?? new EntityUrlResolver();
     }
 
     /**
@@ -234,6 +243,10 @@ class RelatedRecordsRenderer implements RelatedRecordsRendererInterface
     /**
      * Get the URL to open a related record in a new window/tab.
      *
+     * Delegates to the shared EntityUrlResolver so URL patterns are
+     * defined once in ksf_FA_Common and reused across all modules
+     * (Notes, bank_import, CRM, HRM, Projects, …).
+     *
      * @param string $type Entity type key
      * @param string|int $id Primary key
      * @return string URL
@@ -241,19 +254,7 @@ class RelatedRecordsRenderer implements RelatedRecordsRendererInterface
      */
     private function recordUrl($type, $id)
     {
-        $urls = array(
-            'customer' => "/sales/customer_inquiries.php?customer_id={$id}",
-            'contact' => "/crm/crm_contacts.php?contact_id={$id}",
-            'meeting' => "/crm/meeting_view.php?id={$id}",
-            'opportunity' => "/crm/opportunity_view.php?id={$id}",
-            'project' => "/project/project_view.php?project_id={$id}",
-            'task' => "/project/task_view.php?task_id={$id}",
-            'calendar' => "/calendar/cal.php?id={$id}",
-            'attachment' => "/admin/attachments.php?vw={$id}",
-            'invoice' => "/sales/sales_inquiry.php?trans_no={$id}",
-        );
-
-        return isset($urls[$type]) ? $urls[$type] : "#";
+        return $this->urlResolver->resolveUrl($type, $id);
     }
 
     /**
