@@ -89,9 +89,12 @@ class RelatedRecordsRenderer extends DefaultRelatedRecordsRenderer
     /**
      * Resolve a record label from the entity registry / ContactResolver.
      *
-     * For 'contact' type, delegates to ContactResolver::findById() so the
-     * person's display name is shown instead of the raw id. All other types
-     * fall back to the raw id (no lookup needed for the summary table).
+     * For 'contact' type, delegates to ContactResolver::findContactById() so
+     * the person's display name is shown instead of the raw id.  findContactById()
+     * takes the contact-relation id (crm_contacts.id) and returns the person
+     * data plus the relation id — which is exactly what a note link carries.
+     * All other types fall back to the raw id (no lookup needed for the summary
+     * table).
      *
      * @param string $type
      * @param string|int $id
@@ -101,7 +104,7 @@ class RelatedRecordsRenderer extends DefaultRelatedRecordsRenderer
     public function resolveLabel($type, $id)
     {
         if ($type === 'contact') {
-            $contact = $this->contactResolver->findById((int) $id);
+            $contact = $this->contactResolver->findContactById((int) $id);
             if ($contact !== null && $contact->getDisplayName() !== '') {
                 return $contact->getDisplayName();
             }
