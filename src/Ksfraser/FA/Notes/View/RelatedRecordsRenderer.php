@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace ksfraser\FrontAccounting\Notes\View;
 
+use ksfraser\FrontAccounting\Common\ContactResolver\ContactResolver;
 use ksfraser\FrontAccounting\Notes\Repository\EntityRegistry;
 use ksfraser\RelatedTo\DTO\RelatedRecordDto;
 use ksfraser\RelatedTo\UI\DefaultRelatedRecordsRenderer;
@@ -20,6 +21,9 @@ use ksfraser\RelatedTo\UI\DefaultRelatedRecordsRenderer;
  * Border rendering is opt-in via the `table_border` render option; Notes
  * always passes `table_border => true`.
  *
+ * Contact labels are resolved through the shared ContactResolver (ksf_FA_Common),
+ * never through raw SQL.
+ *
  * @since 1.0.0
  */
 class RelatedRecordsRenderer extends DefaultRelatedRecordsRenderer
@@ -27,13 +31,19 @@ class RelatedRecordsRenderer extends DefaultRelatedRecordsRenderer
     /** @var EntityRegistry Entity registry for label resolution */
     private $registry;
 
+    /** @var ContactResolver Resolves contact/person labels by id */
+    private $contactResolver;
+
     /**
      * @param EntityRegistry $registry Entity registry for label resolution
+     * @param ContactResolver|null $contactResolver Contact resolver (defaults
+     *        to a new ContactResolver backed by FaContactResolver)
      * @since 1.0.0
      */
-    public function __construct(EntityRegistry $registry = null)
+    public function __construct(EntityRegistry $registry = null, ContactResolver $contactResolver = null)
     {
         $this->registry = $registry ?? new EntityRegistry();
+        $this->contactResolver = $contactResolver ?? new ContactResolver();
 
         $typeLabels = array(
             'customer' => _('Customers'),
@@ -47,8 +57,6 @@ class RelatedRecordsRenderer extends DefaultRelatedRecordsRenderer
             'contract' => _('Contracts'),
             'note' => _('Notes'),
         );
-
-        $lhsId = null; // resolved per-call in renderRelatedRecords
 
         parent::__construct(array(
             'css_class' => 'related-records',
@@ -79,7 +87,11 @@ class RelatedRecordsRenderer extends DefaultRelatedRecordsRenderer
     }
 
     /**
-     * Resolve a record label from the entity registry / FA db_query.
+     * Resolve a record label from the entity registry / ContactResolver.
+     *
+     * For 'contact' type, delegates to ContactResolver::findById() so the
+     * person's display name is shown instead of the raw id. All other types
+     * fall back to the raw id (no lookup needed for the summary table).
      *
      * @param string $type
      * @param string|int $id
@@ -88,28 +100,10 @@ class RelatedRecordsRenderer extends DefaultRelatedRecordsRenderer
      */
     public function resolveLabel($type, $id)
     {
-        $def = $this->registry->get($type);
-
-        if ($def === null) {
-            return (string) $id;
-        }
-
-        global $db;
-        if (!isset($db) || !$db instanceof \mysqli) {
-            return (string) $id;
-        }
-
-        $table = TB_PREF . $def['table'];
-        $pk = $def['pk'];
-        $labelCol = $def['label'];
-
-        $sql = "SELECT `$labelCol` AS label FROM `$table` WHERE `$pk` = " . $db->real_escape_string((string) $id) . " LIMIT 1";
-        $result = db_query($sql);
-
-        if ($result !== false && db_num_rows($result) > 0) {
-            $row = db_fetch_assoc($result);
-            if ($row !== false && !empty($row['label'])) {
-                return (string) $row['label'];
+        if ($type === 'contact') {
+            $contact = $this->contactResolver->findById((int) $id);
+            if ($contact !== null && $contact->getDisplayName() !== '') {
+                return $contact->getDisplayName();
             }
         }
 
