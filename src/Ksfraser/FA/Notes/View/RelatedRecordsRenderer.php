@@ -185,4 +185,21 @@ class RelatedRecordsRenderer extends DefaultRelatedRecordsRenderer
     {
         return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
     }
+
+    /**
+     * Translate a string for display.
+     *
+     * Defined as a method so that DefaultRelatedRecordsRenderer::renderRelatedRecords()
+     * can call $this->translate(...) as a method (it sets 'translate' => '_'
+     * as a callable property, which PHP would otherwise try to call as a
+     * variable function but the parent class invokes it as a method).
+     *
+     * @param string $value
+     * @return string
+     * @since 1.0.0
+     */
+    public function translate($value)
+    {
+        return function_exists('_') ? _( $value ) : (string) $value;
+    }
 }
