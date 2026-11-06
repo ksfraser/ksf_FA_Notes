@@ -6,32 +6,31 @@ namespace ksfraser\FrontAccounting\Notes\View;
 
 use ksfraser\FrontAccounting\Common\ContactResolver\ContactResolver;
 use ksfraser\FrontAccounting\Notes\Repository\EntityRegistry;
+use ksfraser\RelatedTo\UI\RelatedRecordsRendererInterface;
 use ksfraser\RelatedTo\DTO\RelatedRecordDto;
-use ksfraser\RelatedTo\UI\DefaultRelatedRecordsRenderer;
 
 /**
  * Notes-specific related-records renderer.
  *
- * Extends the shared DefaultRelatedRecordsRenderer from related-to-core,
- * injecting FA-specific label, URL, and remove-link resolvers. Renders
- * related records grouped by rhs type under collapsible (twisty) section
- * headers, with resolved labels and clickable links to open records in
- * new windows/tabs.
- *
- * Border rendering is opt-in via the `table_border` render option; Notes
- * always passes `table_border => true`.
+ * Renders related records grouped by rhs type under collapsible (twisty)
+ * section headers, with resolved labels and clickable links to open records
+ * in new windows/tabs.
  *
  * Contact labels are resolved through the shared ContactResolver (ksf_FA_Common),
  * never through raw SQL.
  *
  * @since 1.0.0
  */
-class RelatedRecordsRenderer extends DefaultRelatedRecordsRenderer
+class RelatedRecordsRenderer implements RelatedRecordsRendererInterface
 {
-    /** @var EntityRegistry Entity registry for label resolution */
+    /**
+     * @var EntityRegistry
+     */
     private $registry;
 
-    /** @var ContactResolver Resolves contact/person labels by id */
+    /**
+     * @var ContactResolver Resolves contact/person labels by id
+     */
     private $contactResolver;
 
     /**
@@ -44,33 +43,6 @@ class RelatedRecordsRenderer extends DefaultRelatedRecordsRenderer
     {
         $this->registry = $registry ?? new EntityRegistry();
         $this->contactResolver = $contactResolver ?? new ContactResolver();
-
-        $typeLabels = array(
-            'customer' => _('Customers'),
-            'contact' => _('Contacts'),
-            'meeting' => _('Meetings'),
-            'opportunity' => _('Opportunities'),
-            'project' => _('Projects'),
-            'task' => _('Tasks'),
-            'calendar' => _('Calendar Entries'),
-            'attachment' => _('Attachments'),
-            'contract' => _('Contracts'),
-            'note' => _('Notes'),
-        );
-
-        parent::__construct(array(
-            'css_class' => 'related-records',
-            'header_class' => 'related-header',
-            'table_class' => 'related-table',
-            'table_border' => true,
-            'type_labels' => $typeLabels,
-            'label_resolver' => array($this, 'resolveLabel'),
-            'type_label_resolver' => array($this, 'resolveTypeLabel'),
-            'url_resolver' => array($this, 'resolveUrl'),
-            'remove_resolver' => array($this, 'resolveRemoveLink'),
-            'escape' => array($this, 'esc'),
-            'translate' => '_',
-        ));
     }
 
     /**
@@ -83,44 +55,112 @@ class RelatedRecordsRenderer extends DefaultRelatedRecordsRenderer
         array $related,
         array $options = array()
     ) {
-        return parent::renderRelatedRecords($lhsType, $lhsId, $related, $options);
-    }
+        $cssClass = isset($options['css_class']) ? (string) $options['css_class'] : 'related-records';
+        $headerClass = isset($options['header_class']) ? (string) $options['header_class'] : 'related-header';
+        $tableClass = isset($options['table_class']) ? (string) $options['table_class'] : 'related-table';
+        $tableBordered = !empty($options['table_border']);
 
-    /**
-     * Resolve a record label from the entity registry / ContactResolver.
-     *
-     * For 'contact' type, delegates to ContactResolver::findContactById() so
-     * the person's display name is shown instead of the raw id.  findContactById()
-     * takes the contact-relation id (crm_contacts.id) and returns the person
-     * data plus the relation id — which is exactly what a note link carries.
-     * All other types fall back to the raw id (no lookup needed for the summary
-     * table).
-     *
-     * @param string $type
-     * @param string|int $id
-     * @return string
-     * @since 1.0.0
-     */
-    public function resolveLabel($type, $id)
-    {
-        if ($type === 'contact') {
-            $contact = $this->contactResolver->findContactById((int) $id);
-            if ($contact !== null && $contact->getDisplayName() !== '') {
-                return $contact->getDisplayName();
+        // Group related records by rhs type
+        $groups = array();
+        foreach ($related as $record) {
+            $type = $record->rhsType;
+            if (!isset($groups[$type])) {
+                $groups[$type] = array();
             }
+            $groups[$type][] = $record;
         }
 
-        return (string) $id;
+        if (empty($groups)) {
+            return '<p class="' . $this->esc('no-related') . '">' . _('No related records.') . '</p>';
+        }
+
+        $html = '<div class="' . $this->esc($cssClass) . '">';
+
+        // Sort groups by type label for stable display
+        ksort($groups);
+
+        foreach ($groups as $type => $records) {
+            $label = isset($options['type_labels'][$type])
+                ? (string) $options['type_labels'][$type]
+                : $this->typeLabel($type);
+
+            $count = count($records);
+            $toggleId = 'rel-toggle-' . $this->esc($type) . '-' . $this->esc((string) $lhsId);
+
+            $html .= '<div class="' . $this->esc($headerClass) . '">';
+            $html .= '<h2 class="related-title" onclick="return toggleRelated(\'' . $this->escJs($toggleId) . '\');">';
+            $html .= '<span class="rel-arrow expanded"></span> ' . $this->esc($label);
+            $html .= ' <span class="rel-count">(' . $count . ')</span>';
+            $html .= '</h2>';
+            $html .= '</div>';
+
+            $html .= '<div id="' . $this->esc($toggleId) . '" class="rel-content" style="display:block;">';
+            $tableClasses = $tableClass;
+            if ($tableBordered) {
+                $tableClasses .= ' related-table-bordered';
+            }
+            $html .= '<table class="' . $this->esc($tableClasses) . '">';
+            $html .= '<thead><tr>';
+            $html .= '<th>' . _('Record') . '</th>';
+            $html .= '<th>' . _('Role') . '</th>';
+            $html .= '<th></th>';
+            $html .= '</tr></thead>';
+            $html .= '<tbody>';
+
+            foreach ($records as $record) {
+                $label = $this->recordLabel($record->rhsType, $record->rhsId);
+                $url = $this->recordUrl($record->rhsType, $record->rhsId);
+                $role = $record->linkRole !== null ? $record->linkRole : _('reference');
+
+                $html .= '<tr>';
+                $html .= '<td>';
+                if ($url !== '#') {
+                    $html .= '<a href="' . $this->esc($url) . '" target="_blank" rel="noopener noreferrer">' . $this->esc($label) . '</a>';
+                } else {
+                    $html .= $this->esc($label);
+                }
+                $html .= '</td>';
+                $html .= '<td>' . $this->esc($role) . '</td>';
+                $html .= '<td><a href="notes.php?action=unlink&unlink_type=' . $this->esc($record->rhsType) . '&unlink_id=' . $this->esc($record->rhsId) . '&unlink_role=' . $this->esc($role) . '&edit_id=' . $this->esc((string) $lhsId) . '" onclick="return confirm(\'' . _('Remove this association?') . '\');">' . _('Remove') . '</a></td>';
+                $html .= '</tr>';
+            }
+
+            $html .= '</tbody></table>';
+            $html .= '</div>';
+        }
+
+        $html .= '</div>';
+
+        $html .= '<style>'
+            . '.related-title { font-size: 1.15em; font-weight: bold; margin: 0 0 0.5em 0; cursor: pointer; }'
+            . '.related-title .rel-arrow { display: inline-block; width: 0; height: 0; margin-right: 6px; vertical-align: middle; }'
+            . '.related-title .rel-arrow.expanded { border-top: 6px solid #555; border-left: 4px solid transparent; border-right: 4px solid transparent; border-bottom: none; }'
+            . '.related-title .rel-arrow.collapsed { border-left: 6px solid #555; border-top: 4px solid transparent; border-bottom: 4px solid transparent; border-right: none; }'
+            . 'table.related-table-bordered, table.related-table-bordered th, table.related-table-bordered td { border: 1px solid #999; border-collapse: collapse; }'
+            . 'table.related-table-bordered { border: 1px solid #999; }'
+            . '</style>';
+        $html .= '<script>'
+            . 'function toggleRelated(id) {'
+            . ' var el = document.getElementById(id);'
+            . ' if (!el) return false;'
+            . ' var arrow = el.previousElementSibling.querySelector(".rel-arrow");'
+            . ' if (el.style.display === "none") { el.style.display = "block"; if (arrow) arrow.className = "rel-arrow expanded"; }'
+            . ' else { el.style.display = "none"; if (arrow) arrow.className = "rel-arrow collapsed"; }'
+            . ' return false;'
+            . '}'
+            . '</script>';
+
+        return $html;
     }
 
     /**
-     * Resolve a type label.
+     * Human-readable label for an entity type.
      *
      * @param string $type
      * @return string
      * @since 1.0.0
      */
-    public function resolveTypeLabel($type)
+    private function typeLabel($type)
     {
         $labels = array(
             'customer' => _('Customers'),
@@ -139,14 +179,67 @@ class RelatedRecordsRenderer extends DefaultRelatedRecordsRenderer
     }
 
     /**
+     * Label for a related record — resolves actual name from the entity's table.
+     *
+     * For 'contact' type, delegates to ContactResolver::findContactById() so
+     * the person's display name is shown.  findContactById() takes the
+     * contact-relation id (crm_contacts.id) that note links carry and returns
+     * the person's data — which is the correct id space (note links store
+     * crm_contacts.id, not crm_persons.id).
+     *
+     * @param string $type Entity type key (e.g. 'customer', 'contact')
+     * @param string|int $id Primary key
+     * @return string Resolved label, or the ID if not found
+     * @since 1.0.0
+     */
+    private function recordLabel($type, $id)
+    {
+        if ($type === 'contact') {
+            $contact = $this->contactResolver->findContactById((int) $id);
+            if ($contact !== null && $contact->getDisplayName() !== '') {
+                return $contact->getDisplayName();
+            }
+            return (string) $id;
+        }
+
+        $def = $this->registry->get($type);
+
+        if ($def === null) {
+            return (string) $id;
+        }
+
+        // Use FA's db_query to look up the label
+        global $db;
+        if (!isset($db) || !$db instanceof \mysqli) {
+            return (string) $id;
+        }
+
+        $table = TB_PREF . $def['table'];
+        $pk = $def['pk'];
+        $labelCol = $def['label'];
+
+        $sql = "SELECT `$labelCol` AS label FROM `$table` WHERE `$pk` = " . $db->real_escape_string((string) $id) . " LIMIT 1";
+        $result = db_query($sql);
+
+        if ($result !== false && db_num_rows($result) > 0) {
+            $row = db_fetch_assoc($result);
+            if ($row !== false && !empty($row['label'])) {
+                return (string) $row['label'];
+            }
+        }
+
+        return (string) $id;
+    }
+
+    /**
      * Get the URL to open a related record in a new window/tab.
      *
-     * @param string $type
-     * @param string|int $id
+     * @param string $type Entity type key
+     * @param string|int $id Primary key
      * @return string URL
      * @since 1.0.0
      */
-    public function resolveUrl($type, $id)
+    private function recordUrl($type, $id)
     {
         $urls = array(
             'customer' => "sales/customer_inquiries.php?customer_id={$id}",
@@ -164,42 +257,22 @@ class RelatedRecordsRenderer extends DefaultRelatedRecordsRenderer
     }
 
     /**
-     * Build the confirming unlink remove link for a related record.
-     *
-     * @param RelatedRecordDto $record
-     * @param string $lhsId
-     * @return string HTML
-     * @since 1.0.0
-     */
-    public function resolveRemoveLink($record, $lhsId)
-    {
-        return '<a href="notes.php?action=unlink&unlink_type=' . $this->esc($record->rhsType) . '&unlink_id=' . $this->esc($record->rhsId) . '&unlink_role=' . $this->esc($record->linkRole) . '&edit_id=' . $this->esc((string) $lhsId) . '" onclick="return confirm(\'' . $this->esc(_('Remove this association?')) . '\');">' . _('Remove') . '</a>';
-    }
-
-    /**
      * @param string $value
      * @return string
      * @since 1.0.0
      */
-    public function esc($value)
+    private function esc($value)
     {
         return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
     }
 
     /**
-     * Translate a string for display.
-     *
-     * Defined as a method so that DefaultRelatedRecordsRenderer::renderRelatedRecords()
-     * can call $this->translate(...) as a method (it sets 'translate' => '_'
-     * as a callable property, which PHP would otherwise try to call as a
-     * variable function but the parent class invokes it as a method).
-     *
      * @param string $value
      * @return string
      * @since 1.0.0
      */
-    public function translate($value)
+    private function escJs($value)
     {
-        return function_exists('_') ? _( $value ) : (string) $value;
+        return str_replace(array('\\', "'"), array('\\\\', "\\'"), (string) $value);
     }
 }
