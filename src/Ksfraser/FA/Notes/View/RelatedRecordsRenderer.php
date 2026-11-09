@@ -190,11 +190,12 @@ class RelatedRecordsRenderer implements RelatedRecordsRendererInterface
     /**
      * Label for a related record — resolves actual name from the entity's table.
      *
-     * For 'contact' type, delegates to ContactResolver::findContactById() so
-     * the person's display name is shown.  findContactById() takes the
-     * contact-relation id (crm_contacts.id) that note links carry and returns
-     * the person's data — which is the correct id space (note links store
-     * crm_contacts.id, not crm_persons.id).
+     * For 'contact' type, delegates to ContactResolver::findById() so the
+     * person's display name is shown.  findById() takes the person id
+     * (crm_persons.id) that note links carry — the contact picker stores the
+     * person's primary key, not the contact-relation id — and returns the
+     * person's data.  All other types fall back to the raw id when no label is
+     * found.
      *
      * @param string $type Entity type key (e.g. 'customer', 'contact')
      * @param string|int $id Primary key
@@ -204,7 +205,7 @@ class RelatedRecordsRenderer implements RelatedRecordsRendererInterface
     private function recordLabel($type, $id)
     {
         if ($type === 'contact') {
-            $contact = $this->contactResolver->findContactById((int) $id);
+            $contact = $this->contactResolver->findById((int) $id);
             if ($contact !== null && $contact->getDisplayName() !== '') {
                 return $contact->getDisplayName();
             }

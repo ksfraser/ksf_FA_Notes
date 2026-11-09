@@ -331,11 +331,12 @@ final class NotesLinkRepository implements NotesLinkRepositoryInterface
             $def = $this->getEntityDef($resolvedLink['entity_type']);
 
             if ($def !== null) {
-                // Contact type uses ContactResolver::findContactById() because
-                // entity_id is crm_contacts.id (relation id), not crm_persons.id
-                // Using crm_persons.id directly would fail for most contacts
+                // Contact type resolves through ContactResolver::findById().
+                // The link's entity_id is the person's primary key
+                // (crm_persons.id) — that is what the contact picker stores —
+                // so look the person up by person id, not by contact-relation id.
                 if ($resolvedLink['entity_type'] === 'contact' && $this->contactResolver !== null) {
-                    $contact = $this->contactResolver->findContactById((int) $resolvedLink['entity_id']);
+                    $contact = $this->contactResolver->findById((int) $resolvedLink['entity_id']);
                     if ($contact !== null && $contact->getDisplayName() !== '') {
                         $resolvedLink['label'] = $contact->getDisplayName();
                         $resolvedLink['known'] = true;
