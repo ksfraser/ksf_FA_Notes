@@ -4,15 +4,17 @@ declare(strict_types=1);
 
 namespace ksfraser\FrontAccounting\Notes\Contract;
 
+use ksfraser\FrontAccounting\Common\Contract\LinkRolesContract;
+
 /**
  * Entity registry contract - source of truth for entity type definitions.
  *
  * Each entity type defines: table, pk, label, module, picker, multiple, title,
- * options_hook (optional). Modules can extend via NOTES_ENTITY_TYPES hook.
+ * options_hook (optional). Modules can extend via RELATED_ENTITY_TYPES hook.
  *
  * @since 1.0.0
  */
-interface EntityRegistryInterface
+interface EntityRegistryInterface extends LinkRolesContract
 {
     /**
      * Get the full entity type registry.
@@ -42,21 +44,6 @@ interface EntityRegistryInterface
      * @return array<string, string>
      */
     public function typeLabels(): array;
-
-    /**
-     * Link roles valid for one entity type.
-     *
-     * @param string $entity_type Registry key
-     * @return array<string, string> role => label
-     */
-    public function linkRolesFor(string $entity_type): array;
-
-    /**
-     * Default link roles when type has no declared roles.
-     *
-     * @return array<string, string>
-     */
-    public function defaultLinkRoles(): array;
 
     /**
      * Note type categories (note_type => label).

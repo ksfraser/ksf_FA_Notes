@@ -281,24 +281,33 @@ final class NotesLinkRepository implements NotesLinkRepositoryInterface
      */
     public function delete(int $note_id, string $entity_type, string $entity_id, ?string $link_role = null): bool
     {
-        // Try RelatedTo repository directly for unrelate.
-        $repoClass = '\\ksfraser\\FrontAccounting\\RelatedTo\\Repository\\RelatedRecordRepository';
-        if (class_exists($repoClass)) {
-            $repo = new $repoClass();
-            $repo->unrelate('note', $note_id, $entity_type, $entity_id, $link_role);
-        } else {
-            // Fallback: direct table access.
-            $sql = 'DELETE FROM ' . TB_PREF . 'ksf_Notes_link WHERE `note_id` = '
-                . notes_db_escape((int) $note_id)
-                . ' AND `entity_type` = ' . notes_db_escape($entity_type)
-                . ' AND `entity_id` = ' . notes_db_escape((string) $entity_id);
-
-            if ($link_role !== null) {
-                $sql .= ' AND `link_role` = ' . notes_db_escape($link_role);
+        // Try RelatedTo hook first (preferred path).
+        if (function_exists('hook_invoke')) {
+            $dto = new RelatedRecordDto(
+                'note',
+                $note_id,
+                $entity_type,
+                $entity_id,
+                $link_role
+            );
+            $result = $dto;
+            hook_invoke('ksf_FA_RelatedTo', 'UNRELATE_RECORDS', $result, null);
+            if (is_array($result) && isset($result['ok']) && $result['ok'] === true) {
+                return true;
             }
-
-            db_query($sql, 'Could not unlink note from record');
         }
+
+        // Fallback: direct table access (RelatedTo not active).
+        $sql = 'DELETE FROM ' . TB_PREF . 'ksf_Notes_link WHERE `note_id` = '
+            . notes_db_escape((int) $note_id)
+            . ' AND `entity_type` = ' . notes_db_escape($entity_type)
+            . ' AND `entity_id` = ' . notes_db_escape((string) $entity_id);
+
+        if ($link_role !== null) {
+            $sql .= ' AND `link_role` = ' . notes_db_escape($link_role);
+        }
+
+        db_query($sql, 'Could not unlink note from record');
 
         return true;
     }
