@@ -297,7 +297,15 @@ final class NotesLinkRepository implements NotesLinkRepositoryInterface
             }
         }
 
-        // Fallback: direct table access (RelatedTo not active).
+        // Try RelatedTo repository directly (RelatedTo active but no hook listener).
+        $repoClass = '\\ksfraser\\FrontAccounting\\RelatedTo\\Repository\\RelatedRecordRepository';
+        if (class_exists($repoClass)) {
+            $repo = new $repoClass();
+            $repo->unrelate('note', $note_id, $entity_type, $entity_id, $link_role);
+            return true;
+        }
+
+        // Fallback: direct table access (RelatedTo not installed).
         $sql = 'DELETE FROM ' . TB_PREF . 'ksf_Notes_link WHERE `note_id` = '
             . notes_db_escape((int) $note_id)
             . ' AND `entity_type` = ' . notes_db_escape($entity_type)
