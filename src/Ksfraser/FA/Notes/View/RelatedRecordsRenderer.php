@@ -117,18 +117,25 @@ class RelatedRecordsRenderer implements RelatedRecordsRendererInterface
             $html .= '<tbody>';
 
             foreach ($records as $record) {
-                $label = $this->recordLabel($record->rhsType, $record->rhsId);
-                $url = $this->recordUrl($record->rhsType, $record->rhsId);
                 $role = $record->linkRole !== null ? $record->linkRole : _('reference');
 
-                $html .= '<tr>';
-                $html .= '<td>';
-                if ($url !== '#') {
-                    $html .= '<a href="' . $this->esc($url) . '" target="_blank" rel="noopener noreferrer">' . $this->esc($label) . '</a>';
+                // Resolved DTO (ContactResolvedDto, InvoiceResolvedDto, …):
+                // the owning module already resolved label + URL. Use its
+                // render methods; fall back to label/url resolution otherwise.
+                if (method_exists($record, 'toHtml')) {
+                    $labelHtml = $record->toHtmlA();
                 } else {
-                    $html .= $this->esc($label);
+                    $label = $this->recordLabel($record->rhsType, $record->rhsId);
+                    $url = $this->recordUrl($record->rhsType, $record->rhsId);
+                    if ($url !== '#') {
+                        $labelHtml = '<a href="' . $this->esc($url) . '" target="_blank" rel="noopener noreferrer">' . $this->esc($label) . '</a>';
+                    } else {
+                        $labelHtml = $this->esc($label);
+                    }
                 }
-                $html .= '</td>';
+
+                $html .= '<tr>';
+                $html .= '<td>' . $labelHtml . '</td>';
                 $html .= '<td>' . $this->esc($role) . '</td>';
                 $html .= '<td><a href="notes.php?action=unlink&unlink_type=' . $this->esc($record->rhsType) . '&unlink_id=' . $this->esc($record->rhsId) . '&unlink_role=' . $this->esc($role) . '&edit_id=' . $this->esc((string) $lhsId) . '" onclick="return confirm(\'' . _('Remove this association?') . '\');">' . _('Remove') . '</a></td>';
                 $html .= '</tr>';

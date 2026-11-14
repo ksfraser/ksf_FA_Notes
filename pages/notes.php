@@ -183,14 +183,21 @@ try {
 
         $owners = notes_page_owner_options($currentUserId);
 
-        (new NoteSummaryTableView(
+        // One renderer shared by summary and form so both views render
+        // related records identically (twisty sections, resolved labels,
+        // clickable links, Remove controls).
+        $renderer = new RelatedRecordsRenderer($entityRegistry);
+
+        $summaryView = new NoteSummaryTableView(
             $options,
             $notes,
             $filter,
             $currentUserId,
             $currentUserName,
             $owners
-        ))->render();
+        );
+        $summaryView->setRenderer($renderer);
+        $summaryView->render();
 
         end_page();
         exit;

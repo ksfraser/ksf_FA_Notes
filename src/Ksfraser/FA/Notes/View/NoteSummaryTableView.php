@@ -6,6 +6,8 @@ namespace ksfraser\FrontAccounting\Notes\View;
 
 use Ksfraser\FrontAccounting\Notes\DTO\NotesFilter;
 use Ksfraser\FrontAccounting\Notes\Entity\EntityOptionsProvider;
+use ksfraser\RelatedTo\DTO\RelatedRecordDto;
+use ksfraser\RelatedTo\UI\RelatedRecordsRendererInterface;
 
 /**
  * The notes summary table.
@@ -32,6 +34,9 @@ class NoteSummaryTableView extends AbstractListView
     /** @var array<string, string> */
     private $owners;
 
+    /** @var RelatedRecordsRendererInterface|null */
+    private $renderer;
+
     /**
      * @param EntityOptionsProvider $options   Dropdown data, from responders
      * @param array[]                $notes     Rows, each with a resolved 'links' key
@@ -54,6 +59,20 @@ class NoteSummaryTableView extends AbstractListView
         $this->notes = $notes;
         $this->filter = $filter;
         $this->owners = $owners;
+    }
+
+    /**
+     * Set the related-records renderer (SuiteCRM-style twisty tables).
+     *
+     * @param RelatedRecordsRendererInterface $renderer
+     * @return $this
+     * @since 1.0.0
+     */
+    public function setRenderer(RelatedRecordsRendererInterface $renderer)
+    {
+        $this->renderer = $renderer;
+
+        return $this;
     }
 
     /**
@@ -143,6 +162,10 @@ class NoteSummaryTableView extends AbstractListView
      * A link whose target has gone missing is shown as such rather than
      * silently dropped, so a note is never quietly edited down.
      *
+     * When a renderer is set (shared with the form view), the links are
+     * rendered as RelatedRecordDto[] through the same twisty-section table
+     * used on the form, so summary and form show identical output.
+     *
      * @param array $note Note row with a 'links' key
      * @return string
      * @since 1.0.0
@@ -153,6 +176,38 @@ class NoteSummaryTableView extends AbstractListView
 
         if (!$links) {
             return $this->safeStr(_('(not attached)'));
+        }
+
+        // When a renderer is wired in, render through it so summary and form
+        // share identical output (twisty sections grouped by type, resolved
+        // labels, clickable links, Remove controls).
+        if ($this->renderer !== null) {
+            $dtos = array();
+            foreach ($links as $link) {
+                if ($link instanceof RelatedRecordDto) {
+                    $dtos[] = $link;
+                } elseif (is_array($link)) {
+                    $dtos[] = new RelatedRecordDto(
+                        'note',
+                        $link['note_id'] ?? 0,
+                        $link['entity_type'] ?? '',
+                        $link['entity_id'] ?? '',
+                        $link['link_role'] ?? null
+                    );
+                }
+            }
+
+            return $this->renderer->renderRelatedRecords(
+                'note',
+                (string) ($note['id'] ?? 0),
+                $dtos,
+                array(
+                    'css_class' => 'related-records',
+                    'header_class' => 'related-header',
+                    'table_class' => 'related-table',
+                    'table_border' => true,
+                )
+            );
         }
 
         $parts = array();
